@@ -1,9 +1,6 @@
 # RTScale 分割描画の修正（v0.91）
 
-MWM独立実装に対するローカル修正です。RTScaleの技術情報を公開したmogareta7731氏への謝辞と、Mesa／独立実装の各ライセンスは引き続き適用されます。
-
-- https://zenn.dev/mogareta7731/articles/82f3f0d9567abc
-- https://note.com/mogareta7731/n/n4db668be92b5
+MWM独立実装に対するローカル修正です
 
 通常の720px高に加え、その半分の360px高の描画先と対応するScreenParamsを同じ倍率で拡大します。基準幅の上限、形式フィルター、OFF/x1、MSAAの既定方針は維持します。TexelSizeはその設定を有効にした場合だけ変換します。
 
