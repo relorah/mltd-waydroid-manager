@@ -16,6 +16,7 @@ from collections import deque
 from pathlib import Path
 from shutil import which
 import bc250_gpu
+from overlay_owner import hud_should_run
 
 # The desktop may export GDK_BACKEND=x11 for other applications. The HUD
 # needs the host Wayland connection for layer-shell above fullscreen windows.
@@ -309,6 +310,7 @@ class PerformanceOverlay:
         self.window.connect("size-allocate", self.apply_click_through)
         self.window.connect("destroy", self.shutdown)
         self.window.show_all()
+        GLib.timeout_add(250, self.enforce_saved_mode)
         GLib.idle_add(self.apply_click_through)
         self.start_collector()
         self._switcher_attempts = 0
@@ -318,6 +320,13 @@ class PerformanceOverlay:
             GLib.timeout_add(FOLLOW_INTERVAL_MS, self.follow_target_window)
         else:
             self.set_fallback_position()
+
+    def enforce_saved_mode(self):
+        cfg = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'mwm'
+        if not hud_should_run(self.args.style, cfg):
+            self.shutdown()
+            return False
+        return not self.stop_event.is_set()
 
     def set_fallback_position(self):
         display = Gdk.Display.get_default()
@@ -672,10 +681,13 @@ for(var i=0;i<list.length;i++) {
 
 
 def main():
+    args = parse_args()
+    cfg = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'mwm'
+    if not hud_should_run(args.style, cfg):
+        return
     lock_fd = acquire_single_instance_lock()
     if lock_fd is None:
         return
-    args = parse_args()
     overlay = PerformanceOverlay(args)
 
     def stop_signal(*_):

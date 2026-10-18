@@ -5,19 +5,23 @@ import argparse,fcntl,os,signal,subprocess,sys,time
 from pathlib import Path
 from mangoapp_fps import render_config
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from overlay_owner import hud_instances
 RENDERER=ROOT/'fps_overlay.py'
 CFG=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'mwm'
 STATE=Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'mwm'
 def instances():
-    found=[]
-    for p in Path('/proc').iterdir():
-        if not p.name.isdigit():continue
-        try:
-            if p.stat().st_uid!=os.getuid():continue
-            args=(p/'cmdline').read_bytes().split(b'\0')
-            if os.fsencode(RENDERER) in args:found.append((int(p.name),args))
-        except (OSError,PermissionError):pass
-    return found
+    return hud_instances(RENDERER)
+
+def stop_huds():
+    for pid,_ in instances():
+        try:os.kill(pid,signal.SIGTERM)
+        except ProcessLookupError:pass
+    deadline=time.monotonic()+1
+    while instances() and time.monotonic()<deadline:time.sleep(.05)
+    for pid,_ in instances():
+        try:os.kill(pid,signal.SIGKILL)
+        except ProcessLookupError:pass
 def running():
     try:
         if (CFG/'display-backend').read_text().strip()=='kwin':
@@ -54,6 +58,10 @@ def reconcile(action='sync',if_running=False):
         if action=='stop':mode='off'
         if mode not in ('off','minimal','detailed','mangoapp'):raise ValueError('Invalid saved FPS counter mode')
         use_mango = mango_running()
+        # Stop source/installed HUDs before revealing MangoApp, even when a
+        # later mangohudctl operation fails. Their absolute paths may differ.
+        if mode in ('off','mangoapp'):
+            stop_huds()
         if use_mango:
             cfg=CFG/'MangoApp.conf'
             visible = mode == 'mangoapp'
@@ -64,20 +72,15 @@ def reconcile(action='sync',if_running=False):
                 subprocess.run(['mangohudctl','set','reload_config','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
                 subprocess.run(['mangohudctl','set','no_display','0' if visible else '1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
             except (OSError,subprocess.SubprocessError) as e:
+                stop_huds()
                 raise RuntimeError('MangoApp visibility could not be updated; check that mangohudctl is installed and the client is running') from e
             if mode in ('off','mangoapp'):
-                for pid,_ in instances():
-                    try:os.kill(pid,signal.SIGTERM)
-                    except ProcessLookupError:pass
                 print('FPS Counter: MangoApp ' + ('On' if visible else 'Off') + ' / applied')
                 return
             # Legacy MWM HUD selections hide MangoApp before applying that HUD.
         if mode=='mangoapp':
             # MangoApp must be attached when Gamescope starts. Never silently
             # replace the selected renderer with the old Minimal HUD.
-            for pid,_ in instances():
-                try:os.kill(pid,signal.SIGTERM)
-                except ProcessLookupError:pass
             print('FPS Counter: MangoApp saved; Restart is required to start MangoApp')
             return
         current=instances()
@@ -89,14 +92,7 @@ def reconcile(action='sync',if_running=False):
             except (ValueError,IndexError):return False
         if mode!='off' and len(current)==1 and matches(current[0][1]):
             print(f'FPS Counter: {mode} / already running');return
-        for pid,_ in current:
-            try:os.kill(pid,signal.SIGTERM)
-            except ProcessLookupError:pass
-        deadline=time.monotonic()+1
-        while instances() and time.monotonic()<deadline:time.sleep(.05)
-        for pid,_ in instances():
-            try:os.kill(pid,signal.SIGKILL)
-            except ProcessLookupError:pass
+        stop_huds()
         if mode=='off':
             print('FPS Counter: Off');return
         with (STATE/'performance-overlay.log').open('a') as log:
