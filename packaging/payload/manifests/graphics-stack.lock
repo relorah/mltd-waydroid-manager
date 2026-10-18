@@ -1,9 +1,9 @@
 format = 1
 status = "half-height-device-probes-verified-amd"
 target = "Waydroid Android 11 x86_64 / API 30"
-sources_archive = "MLTD_Waydroid_Manager_v0.91_sources.tar.zst"
+sources_archive = "MLTD_Waydroid_Manager_v0.92_sources.tar.zst"
 source_base_member = "graphics-sources.tar.zst"
-sources_url = "https://github.com/relorah/mltd-waydroid-manager/releases/download/v0.91/MLTD_Waydroid_Manager_v0.91_sources.tar.zst"
+sources_url = "https://github.com/relorah/mltd-waydroid-manager/releases/download/v0.92/MLTD_Waydroid_Manager_v0.92_sources.tar.zst"
 local_patch = "docs/graphics/msaa/mesa-msaa-storage2.patch"
 additional_local_patch = "docs/graphics/depth-blit/mesa-depth-only-blit.patch"
 half_height_patch = "docs/graphics/half-height/mesa-rtscale-half-height.patch"
