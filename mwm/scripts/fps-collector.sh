@@ -93,6 +93,19 @@ while true; do
     sleep "$INTERVAL"
     continue
   fi
+  # Reuse the session controller's sample instead of querying SurfaceFlinger
+  # twice. If it is stopped or stale, retain the existing independent path.
+  shared="${XDG_STATE_HOME:-$HOME/.local/state}/mwm/gamescope-fps-sample"
+  if [[ "${MWM_FPS_SOURCE_OWNER:-0}" != 1 && -r "$shared" ]]; then
+    shared_fps= shared_ft= shared_time= shared_pid=
+    read -r shared_fps shared_ft shared_time shared_pid < "$shared" || true
+    if [[ "$shared_fps" =~ ^[0-9]+\.[0-9]+$ && "$shared_ft" =~ ^[0-9]+\.[0-9]+$ && "$shared_time" =~ ^[0-9]{10}$ && "$shared_pid" =~ ^[0-9]+$ ]] &&
+       (( EPOCHSECONDS >= shared_time && EPOCHSECONDS - shared_time <= 1 )) && kill -0 "$shared_pid" 2>/dev/null; then
+      emit_metrics "$shared_fps $shared_ft"
+      sleep "$INTERVAL"
+      continue
+    fi
+  fi
   if ! app_running; then
     LAYER=""; LAST_TS=""; STALE_COUNT=0
     emit_metrics '0.00 0.00'

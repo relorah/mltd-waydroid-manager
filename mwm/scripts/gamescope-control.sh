@@ -246,6 +246,7 @@ write_session() {
     printf 'fsr_target_height=%q\n' "$th"
     printf 'output_width=%q\n' "$ow"
     printf 'output_height=%q\n' "$oh"
+    printf 'virtual_refresh=120\n'
     if [[ "$fsr_scale" == 100 ]]; then printf 'filter=linear\n'; else printf 'filter=fsr\n'; fi
     printf 'fsr_scale_percent=%q\n' "$fsr_scale"
     printf 'sharpness_percent=%q\n' "$sharp_pct"
@@ -318,15 +319,16 @@ outer_backend() {
   fi
 }
 
+# Request a 120 Hz virtual mode in both layers, independently of host Hz.
 start_no_fsr() {
   local mode="$1" iw="$2" ih="$3" ow="$4" oh="$5" fg="$6" overlay="$7"
   local sharp_pct=0 pipeline=linear-direct cas_status=OFF
   local -a args=(
     gamescope --backend "$(outer_backend "$fg")" --expose-wayland --keep-alive --force-windows-fullscreen
-    -w "$iw" -h "$ih" -W "$ow" -H "$oh" -S fit -F linear
+    -w "$iw" -h "$ih" -W "$ow" -H "$oh" -r 120 -S fit -F linear
   )
   if [[ "$(read_window_mode)" == fullscreen ]]; then args+=(-f); else args+=(-b); fi
-  args+=(-- env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash -c 'export WAYLAND_DISPLAY="${GAMESCOPE_WAYLAND_DISPLAY:?Gamescope Wayland socket unavailable}"; exec waydroid show-full-ui')
+  args+=(-- env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash "$SCRIPT_DIR/gamescope-client.sh")
   write_session "$mode" "$iw" "$ih" "$ow" "$oh" 100 "$sharp_pct" "$iw" "$ih" "$pipeline" "$fg" "$overlay"
   : > "$LOG_FILE"
   {
@@ -344,7 +346,7 @@ start_fsr_150() {
 
   local -a args=(
     gamescope --backend "$(outer_backend "$fg")" --expose-wayland --keep-alive --force-windows-fullscreen
-    -w "$iw" -h "$ih" -W "$ow" -H "$oh" -S fit -F fsr
+    -w "$iw" -h "$ih" -W "$ow" -H "$oh" -r 120 -S fit -F fsr
   )
   # Apply the selected native RCAS strength (0=max, 20=min).
   if [[ -n "$sharp_opt" ]]; then
@@ -355,7 +357,7 @@ start_fsr_150() {
     fi
   fi
   if [[ "$(read_window_mode)" == fullscreen ]]; then args+=(-f); else args+=(-b); fi
-  args+=(-- env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash -c 'export WAYLAND_DISPLAY="${GAMESCOPE_WAYLAND_DISPLAY:?Gamescope Wayland socket unavailable}"; exec waydroid show-full-ui')
+  args+=(-- env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash "$SCRIPT_DIR/gamescope-client.sh")
 
   write_session "$mode" "$iw" "$ih" "$ow" "$oh" 150 "$sharp_pct" "$tw" "$th" fsr-direct "$fg" "$overlay"
   : > "$LOG_FILE"
@@ -384,20 +386,20 @@ start_fsr_scaled() {
   # this avoids relying on Wayland protocols in the nested compositor.
   local -a outer=(
     gamescope --backend "$(outer_backend "$fg")" --expose-wayland --keep-alive --force-windows-fullscreen
-    -w "$tw" -h "$th" -W "$ow" -H "$oh" -S fit -F linear
+    -w "$tw" -h "$th" -W "$ow" -H "$oh" -r 120 -S fit -F linear
   )
   if [[ "$(read_window_mode)" == fullscreen ]]; then outer+=(-f); else outer+=(-b); fi
   outer+=(-- env SDL_VIDEODRIVER=x11 DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash -c 'export WAYLAND_DISPLAY="${GAMESCOPE_WAYLAND_DISPLAY:?Outer Gamescope Wayland socket unavailable}"; exec gamescope "$@"' mwm-inner)
   local -a inner=(
     --backend sdl --expose-wayland --keep-alive --force-windows-fullscreen
-    -w "$iw" -h "$ih" -W "$tw" -H "$th" -S fit -F fsr
+    -w "$iw" -h "$ih" -W "$tw" -H "$th" -r 120 -S fit -F fsr
   )
   [[ -n "$sharp_opt" ]] && inner+=("$sharp_opt" "$fsr_native")
   # Host fullscreen belongs to the outer compositor. The outer
   # --force-windows-fullscreen already fills its nested display; requesting a
   # second fullscreen acquisition inside can strand this Wayland surface.
   inner+=( --
-    env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash -c 'export WAYLAND_DISPLAY="${GAMESCOPE_WAYLAND_DISPLAY:?Inner Gamescope Wayland socket unavailable}"; exec waydroid show-full-ui'
+    env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash "$SCRIPT_DIR/gamescope-client.sh"
   )
   local -a full=("${outer[@]}" "${inner[@]}")
 
@@ -505,11 +507,13 @@ case "${1:-status}" in
       if [[ -f "$SESSION_FILE" ]]; then
         # shellcheck disable=SC1090
         source "$SESSION_FILE"
+        printf ' virtual_refresh=%s' "${virtual_refresh:-unknown}"
         printf ' internal=%sx%s fsr_target=%sx%s output=%sx%s mode=%s fsr=%s%% sharpness=%s%% sharpness_enabled=%s pipeline=%s fg=%s overlay=%s window=%s presentation=%s' \
           "${internal_width:-?}" "${internal_height:-?}" "${fsr_target_width:-?}" "${fsr_target_height:-?}" \
           "${output_width:-?}" "${output_height:-?}" "${mode:-?}" "${fsr_scale_percent:-?}" \
           "${sharpness_percent:-?}" "${fsr1_sharpness_enabled:-off}" "${pipeline:-?}" "${frame_generation:-off}" "${performance_overlay:-off}" "${window_mode:-unknown}" "${presentation_backend:-unknown}"
       fi
+      python3 "$SCRIPT_DIR/gamescope-fps-control.py" --status
       printf '\n'
     else
       echo "stopped"
