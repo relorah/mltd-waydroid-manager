@@ -1,4 +1,4 @@
-# MLTD Waydroid Manager (MWM) 0.90 Setup Guide
+# MLTD Waydroid Manager (MWM) 0.92 Setup Guide
 
 MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理するツールです。
 

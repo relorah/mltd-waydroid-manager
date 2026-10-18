@@ -1,3 +1,3 @@
 """Canonical MWM release version."""
 
-__version__ = "0.91"
+__version__ = "0.92"
