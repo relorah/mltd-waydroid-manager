@@ -43,7 +43,7 @@ def build(repo,out,graphics,label):
     version=runpy.run_path(str(repo/'mwm/version.py'))['__version__']
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip()
     timestamp=int(subprocess.check_output(['git','show','-s','--format=%ct','HEAD'],cwd=repo,text=True))
-    prefix=f'MLTD_Waydroid_Manager_v{version}'+('' if label=='release' else '-'+label)
+    prefix=f'MWM_v{version}'+('' if label=='release' else '-'+label)
     out.mkdir(parents=True,exist_ok=True);runtime=out/(prefix+'.zip');sources=out/(prefix+'_sources.tar.zst')
     if runtime.exists() or sources.exists() or (out/'SHA256SUMS').exists():raise ValueError('Output already exists')
     stages=subprocess.check_output(['git','ls-files','--stage'],cwd=repo,text=True).splitlines()
