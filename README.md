@@ -1,4 +1,4 @@
-# MLTD Waydroid Manager (MWM)
+# MLTD Waydroid Manager (M、WM)
 
 Linux + AMD GPU環境で「アイドルマスター ミリオンライブ！ シアターデイズ（以下、ミリシタ）」を高解像度描画するためのプロジェクトです。本ツールはChatGPTおよびCodexを用いて作成・改修し、CachyOSでの実機検証を重ねて開発しています。
 
@@ -77,8 +77,9 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 - **CPU**：AMD Ryzen 7 9700X
 - **GPU**：AMD Radeon RX 6600 XT / RX 9060 XT 8GB
 - **AMD BC250**：8コア16スレッド、GPU 24 CU / 40 CU構成
+- **PS5**：FW 13.60 Ubuntu 26.04 LTS
 - **Display**：1920×1080 120Hz / 3840×2160 120Hz
-- **OS**：CachyOS
+- **OS**：CachyOS / Ubuntu
 
 ## 導入と設定
 
