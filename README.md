@@ -77,6 +77,7 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 - **CPU**：AMD Ryzen 7 9700X
 - **GPU**：AMD Radeon RX 6600 XT / RX 9060 XT 8GB
 - **AMD BC250**：8コア16スレッド、GPU 24 CU / 40 CU構成
+- **SONY PS5**：FW13.60 Ubuntu 26.04 LTS
 - **Display**：1920×1080 120Hz / 3840×2160 120Hz
 - **OS**：CachyOS
 
