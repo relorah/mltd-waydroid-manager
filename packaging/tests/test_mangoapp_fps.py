@@ -92,7 +92,7 @@ class MangoAppFPS(unittest.TestCase):
             native = scripts / "mangoapp-native/mangoapp"
             native.write_text('#!/usr/bin/env bash\n[[ "$MWM_MANGOAPP_FPS_INTEGER_ALIGN" == 1 ]] || exit 10\nprintf patched\n')
             native.chmod(0o755)
-            result = subprocess.run(["bash", str(scripts / "mangoapp-bin/mangoapp")], env={**os.environ, "MWM_REAL_MANGOAPP": "/bin/false", "XDG_CONFIG_HOME": str(base / "config"), "XDG_STATE_HOME": str(base / "state")}, capture_output=True, text=True, timeout=10, check=True)
+            result = subprocess.run(["bash", str(scripts / "mangoapp-bin/mangoapp")], env={**os.environ, "MWM_REAL_MANGOAPP": str(native), "XDG_CONFIG_HOME": str(base / "config"), "XDG_STATE_HOME": str(base / "state")}, capture_output=True, text=True, timeout=10, check=True)
             self.assertEqual(result.stdout, "patched")
 
     def test_command_quotes_script_path(self):

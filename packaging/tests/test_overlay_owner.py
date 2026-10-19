@@ -53,7 +53,7 @@ class OwnerTests(unittest.TestCase):
                 (cfg / 'performance-overlay-mode').write_text(mode)
                 self.assertEqual(hud_should_run('detailed', cfg), visible)
 
-    def switch(self, mode, fail_control=False):
+    def switch(self, mode, fail_control=False, missing_control=False):
         with tempfile.TemporaryDirectory() as d:
             base = Path(d); cfg = base / 'cfg'; cfg.mkdir()
             (cfg / 'performance-overlay-mode').write_text(mode)
@@ -69,16 +69,16 @@ class OwnerTests(unittest.TestCase):
 
             def command(*args, **kwargs):
                 events.append(('mango', args[0]))
-                if fail_control:
+                if fail_control or missing_control:
                     raise subprocess.CalledProcessError(1, args[0])
                 return subprocess.CompletedProcess(args[0], 0)
 
-            with patch.object(control, 'CFG', cfg), patch.object(control, 'STATE', base / 'state'), \
+            with patch.object(control, 'mangoapp_program', lambda *args: None if missing_control else Path('/mock/mangohudctl')), patch.object(control, 'CFG', cfg), patch.object(control, 'STATE', base / 'state'), \
                  patch.object(control, 'instances', lambda: hud_instances(own, proc)), \
                  patch.object(control, 'mango_running', lambda: True), \
                  patch.object(control, 'render_config', lambda visible: f'no_display={int(not visible)}\n'), \
                  patch.object(control.os, 'kill', kill), patch.object(control.subprocess, 'run', command):
-                if fail_control:
+                if fail_control or missing_control:
                     with self.assertRaises(RuntimeError):
                         control.reconcile()
                 else:
@@ -89,6 +89,9 @@ class OwnerTests(unittest.TestCase):
     def test_switch_to_mango_stops_other_copy_before_reveal(self):
         events = self.switch('mangoapp')
         self.assertEqual(events[0], ('kill', 101))
+
+    def test_missing_mango_control_cannot_leave_mwm_hud(self):
+        self.switch('detailed', missing_control=True)
 
     def test_failed_mango_visibility_request_cannot_leave_mwm_hud(self):
         self.switch('detailed', fail_control=True)

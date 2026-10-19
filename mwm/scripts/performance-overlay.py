@@ -71,6 +71,7 @@ def reconcile(action='sync',if_running=False):
             temp=cfg.with_suffix('.tmp');temp.write_text(text);temp.replace(cfg)
             control = mangoapp_program(ROOT, 'mangohudctl')
             if control is None:
+                stop_huds()
                 raise RuntimeError('MangoApp control is unavailable; rerun install.sh --update-app')
             try:
                 subprocess.run([str(control),'set','reload_config','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)

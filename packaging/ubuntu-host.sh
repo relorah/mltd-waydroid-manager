@@ -9,15 +9,12 @@ ubuntu_candidate() {
 
 install_ubuntu_packages() {
   sudo apt-get update
-  # Gamescope is in multiverse; PyGObject and layer-shell are in universe.
-  sudo apt-get install -y software-properties-common
-  sudo add-apt-repository -y universe
-  sudo add-apt-repository -y multiverse
-  sudo apt-get update
+  # Use configured repositories only. Never add a different Ubuntu release.
+  source "$PACKAGING/ubuntu-safe-apt.sh"
   local -a packages=(python3 python-is-python3 python3-venv python3-pip
     python3-gi python3-gi-cairo python3-cairo gir1.2-gtk-3.0
     gir1.2-gtklayershell-0.1 libgtk-layer-shell0 polkitd pkexec zstd rsync
-    xwayland mesa-vulkan-drivers libvulkan1 libxcb-cursor0 libxkbcommon-x11-0
+    xwayland libglfw3 libvulkan1 libxcb-cursor0 libxkbcommon-x11-0
     libegl1 libgl1 libopengl0 libdbus-1-3 libxcb-icccm4 libxcb-image0
     libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1
     pulseaudio-utils desktop-file-utils curl ca-certificates)
@@ -30,7 +27,7 @@ install_ubuntu_packages() {
     if ubuntu_candidate qdbus-qt6; then packages+=(qdbus-qt6); fi
     if ubuntu_candidate kdotool; then packages+=(kdotool); fi
   fi
-  sudo apt-get install -y "${packages[@]}"
+  mwm_ubuntu_safe_install "$PACKAGING" "${packages[@]}"
   local help
   help="$(gamescope --help 2>&1)" || true
   for flag in --backend --expose-wayland --keep-alive --force-windows-fullscreen; do

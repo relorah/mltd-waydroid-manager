@@ -6,7 +6,7 @@ from pathlib import Path,PurePosixPath
 
 GRAPHICS_BASE_SHA256='6ddc1e4dbf0c5663d2ed70df3c6eed406211cffad6c0f406f53c2e87b236d9dd'
 RUNTIME_ROOT={'install.sh','uninstall.sh','MWM.py','README.md','LICENSE'}
-HELPERS={'packaging/mwm-root-helper','packaging/mwm-waydroid-backup.py','packaging/mwm_targeted_backup.py','packaging/ubuntu-host.sh','packaging/build-ubuntu-mangoapp.sh'}
+HELPERS={'packaging/ubuntu-build-sdk.py','packaging/ubuntu-safe-apt.sh','packaging/apt_guard.py','packaging/mwm-root-helper','packaging/mwm-waydroid-backup.py','packaging/mwm_targeted_backup.py','packaging/ubuntu-host.sh','packaging/build-ubuntu-mangoapp.sh'}
 USER_DOCS={'docs/SETUP.md','docs/RTSCALE.md'}
 def digest(path):
     with path.open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
