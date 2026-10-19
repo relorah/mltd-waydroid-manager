@@ -88,5 +88,6 @@ read_waydroid_dimension() {
 }
 
 gamescope_span_enabled() {
+  [[ "${XDG_CURRENT_DESKTOP:-}" != *[Gg][Nn][Oo][Mm][Ee]* ]] || return 1
   [[ "$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/mwm/gamescope-span-enabled" 2>/dev/null || echo off)" == on ]]
 }

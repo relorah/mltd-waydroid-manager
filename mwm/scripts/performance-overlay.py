@@ -7,6 +7,7 @@ from mangoapp_fps import render_config
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from overlay_owner import hud_instances
+from host_platform import is_ubuntu
 RENDERER=ROOT/'fps_overlay.py'
 CFG=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'mwm'
 STATE=Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'mwm'
@@ -57,6 +58,10 @@ def reconcile(action='sync',if_running=False):
         except FileNotFoundError:mode='off'
         if action=='stop':mode='off'
         if mode not in ('off','minimal','detailed','mangoapp'):raise ValueError('Invalid saved FPS counter mode')
+        if mode == 'mangoapp' and is_ubuntu():
+            stop_huds()
+            print('FPS Counter: MangoApp is not supported on Ubuntu; display disabled')
+            return
         use_mango = mango_running()
         # Stop source/installed HUDs before revealing MangoApp, even when a
         # later mangohudctl operation fails. Their absolute paths may differ.
@@ -95,6 +100,17 @@ def reconcile(action='sync',if_running=False):
         stop_huds()
         if mode=='off':
             print('FPS Counter: Off');return
+        # GNOME/Mutter has no layer-shell protocol. A regular floating GTK
+        # window cannot provide a HUD above a native fullscreen Gamescope.
+        if os.environ.get('WAYLAND_DISPLAY'):
+            os.environ['GDK_BACKEND'] = 'wayland'
+        import gi
+        gi.require_version('Gtk', '3.0')
+        gi.require_version('GtkLayerShell', '0.1')
+        from gi.repository import Gtk, GtkLayerShell
+        available, _ = Gtk.init_check(None)
+        if not available or not GtkLayerShell.is_supported():
+            raise RuntimeError('Minimal/Detailed require layer-shell (e.g. KDE Wayland). Select Off on Ubuntu GNOME.')
         with (STATE/'performance-overlay.log').open('a') as log:
             proc=subprocess.Popen([sys.executable,str(RENDERER),'--style',mode,'--size','small','--position','top-left','--interval','0.2','--follow-window'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
         time.sleep(.3)

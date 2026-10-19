@@ -4,11 +4,17 @@ MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理す
 
 ## 対象環境
 
-- CachyOS／Arch系Linux、x86_64、Wayland。
+- CachyOS／Arch系LinuxまたはUbuntu 24.04以降、x86_64、AMD GPU、Wayland。
 - Waydroid Android 11、Google Play、Native Bridge／ARM変換を導入済みで、ミリシタが正常動作すること。
 - sudo権限と、依存パッケージ取得用のネットワーク。
 
 描画バックエンドはGamescopeです。主な動作確認環境はKDE Plasma／WaylandとAMD GPUです。
+
+Ubuntu対応のインストール処理は追加済みですが、Ubuntu実機での動作確認は未実施です。Ubuntu 26.04 LTSではGamescopeを公式multiverseから導入します。24.04 LTSはGamescopeのAPT候補がないため、必要な起動オプションを備えたGamescope 3.16系を先に用意してください。異なるUbuntu版のパッケージを混在させないでください。
+
+UbuntuではPySide6をMWM配下の`.runtime/venv`へ導入します。システムPythonへのpip導入を避け、更新時もこの専用環境を保持します。
+
+UbuntuではMangoAppは未対応です。標準GNOMEのWaylandセッションではFPS CounterはOffで使用します。Minimal／Detailedはlayer-shell対応環境（KDEなど）で使用できます。KDE用のウィンドウ位置・サイズ補助やSpan DisplaysはGNOMEでは利用できません。
 
 ## 導入するもの
 

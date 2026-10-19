@@ -6,7 +6,9 @@ IFS=$'\n\t'
 APP_ID="com.bandainamcoent.imas_millionlive_theaterdays"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mwm/config/versions.env"
-APP_VERSION="$(python -c 'import runpy,sys; print(runpy.run_path(sys.argv[1])["__version__"])' "$SCRIPT_DIR/mwm/version.py")"
+BOOTSTRAP_PYTHON="$(command -v python3 || command -v python || true)"
+[[ -n "$BOOTSTRAP_PYTHON" ]] || { echo 'Python 3 is required.' >&2; exit 1; }
+APP_VERSION="$("$BOOTSTRAP_PYTHON" -c 'import runpy,sys; print(runpy.run_path(sys.argv[1])["__version__"])' "$SCRIPT_DIR/mwm/version.py")"
 PACKAGING="$SCRIPT_DIR/packaging"
 PAYLOAD="$PACKAGING/payload"
 WD="/var/lib/waydroid"
@@ -41,12 +43,25 @@ while (($#)); do
 done
 
 [[ $EUID -ne 0 ]] || die "通常ユーザーで実行してください。"
-command -v pacman >/dev/null 2>&1 || die "CachyOS/Arch用です。"
+[[ "$(uname -s)" == Linux && "$(uname -m)" == x86_64 ]] || die 'Linux x86_64 is required.'
+source /etc/os-release
+case "${ID:-}" in
+  arch|cachyos) HOST_FAMILY=arch ;;
+  ubuntu)
+    HOST_FAMILY=ubuntu
+    BOOTSTRAP_PYTHON=/usr/bin/python3
+    dpkg --compare-versions "${VERSION_ID:-0}" ge 24.04 || die 'Ubuntu 24.04以降が必要です。'
+    export PATH="/usr/games:$PATH"
+    source "$PACKAGING/ubuntu-host.sh"
+    ;;
+  *) die 'CachyOS/ArchまたはUbuntuが必要です。' ;;
+esac
+[[ "${XDG_SESSION_TYPE:-}" == wayland ]] || die 'Waylandセッションで実行してください。'
 mkdir -p "$STATE"
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}"
 exec 7>"${XDG_CONFIG_HOME:-$HOME/.config}/mwm-config.lock"
 flock -n 7 || die "MWMの設定反映・保存中です。完了してから更新してください。"
-python - "$APP_HOME" <<'PY'
+"$BOOTSTRAP_PYTHON" - "$APP_HOME" <<'PY'
 import os, sys
 from pathlib import Path
 targets={str(Path(sys.argv[1])/n) for n in ('mwm.py','MWM.py')}
@@ -92,9 +107,13 @@ verify_payload() {
 
 install_packages() {
   say "Installing MWM host dependencies"
-  sudo pacman -S --needed \
-    python pyside6 gtk3 gtk-layer-shell python-gobject python-cairo polkit \
-    zstd rsync gamescope qt6-tools
+  if [[ "$HOST_FAMILY" == ubuntu ]]; then
+    install_ubuntu_packages
+  else
+    sudo pacman -S --needed \
+      python pyside6 gtk3 gtk-layer-shell python-gobject python-cairo polkit \
+      zstd rsync gamescope qt6-tools
+  fi
 
   python - "$PYSIDE6_MIN_VERSION" <<'PY'
 import re, sys
@@ -108,7 +127,7 @@ if parts(PySide6.__version__) < parts(sys.argv[1]):
     sys.exit(f"PySide6 {PySide6.__version__} is older than required {sys.argv[1]}")
 PY
 
-  if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] && ! command -v kdotool >/dev/null 2>&1; then
+  if [[ "$HOST_FAMILY" == arch && "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] && ! command -v kdotool >/dev/null 2>&1; then
     say "Installing optional KDE Wayland window helper (kdotool)"
     if command -v paru >/dev/null 2>&1; then
       paru -S --needed --noconfirm kdotool || warn "kdotool install failed; optional window verification requires kdotool."
@@ -295,12 +314,13 @@ install_mwm_launcher() {
   # Force content comparison when upgrading from archives whose files all
   # carry normalized timestamps. This prevents a stale script surviving an
   # update merely because size and mtime happen to match.
-  rsync -a --delete --checksum --exclude=/logs/ --exclude=/.git/ --exclude=/.codex/ --exclude=/.agents/ --exclude=/.aws/ "$SCRIPT_DIR/mwm/" "$APP_HOME/"
+  rsync -a --delete --checksum --exclude=/.runtime/ --exclude=/logs/ --exclude=/.git/ --exclude=/.codex/ --exclude=/.agents/ --exclude=/.aws/ "$SCRIPT_DIR/mwm/" "$APP_HOME/"
   chmod +x "$APP_HOME/mwm.py" "$APP_HOME/fps_overlay.py" "$APP_HOME/scripts/"*.sh "$APP_HOME/scripts/"*.py
   chmod +x "$APP_HOME/scripts/mangoapp-bin/mangoapp"
 
   cat > "$LOCAL_BIN/mwm" <<EOF2
 #!/usr/bin/env bash
+export PATH="$APP_HOME/.runtime/venv/bin:/usr/games:\$PATH"
 exec python "$APP_HOME/mwm.py" "\$@"
 EOF2
   chmod +x "$LOCAL_BIN/mwm"
@@ -366,8 +386,11 @@ launch_gui() {
 
 if (( UPDATE_APP )); then
   [[ -x /usr/local/libexec/mwm-root-helper ]] || die "MWM is not installed; run install.sh without --update-app first."
+  if [[ "$HOST_FAMILY" == ubuntu ]]; then
+    install_packages
+  fi
   command -v rsync >/dev/null || die "rsync is required"
-  if ! command -v qdbus6 >/dev/null 2>&1; then
+  if [[ "$HOST_FAMILY" == arch ]] && ! command -v qdbus6 >/dev/null 2>&1; then
     sudo pacman -S --needed qt6-tools
   fi
   backup_waydroid
@@ -380,7 +403,7 @@ fi
 
 verify_payload
 install_packages
-if ! command -v mangoapp >/dev/null 2>&1; then
+if [[ "$HOST_FAMILY" == arch ]] && ! command -v mangoapp >/dev/null 2>&1; then
   sudo pacman -S --needed --noconfirm mangohud || warn "MangoApp installation failed; MWM HUD fallback remains available"
 fi
 check_existing_environment

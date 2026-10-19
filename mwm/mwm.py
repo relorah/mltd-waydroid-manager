@@ -12,6 +12,7 @@ from pathlib import Path
 from version import __version__ as APP_VERSION
 from display_settings import dimensions, ratio_width, legacy_ratio
 from ui_help import help_row, local
+from host_platform import is_ubuntu
 
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QLockFile, QStandardPaths, QProcess, QLocale
 from PySide6.QtWidgets import (
@@ -317,6 +318,15 @@ class MainWindow(QMainWindow):
         self.overlay_mode.addItem("Minimal", "minimal")
         self.overlay_mode.addItem("Detailed", "detailed")
         self.overlay_mode.addItem("MangoApp", "mangoapp")
+        if is_ubuntu():
+            self.overlay_mode.model().item(3).setEnabled(False)
+            self.overlay_mode.model().item(3).setToolTip(local("MangoApp is not supported on Ubuntu.", "UbuntuではMangoAppは未対応です。"))
+        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower().split(":")
+        if "gnome" in desktop:
+            for index in (1, 2):
+                item = self.overlay_mode.model().item(index)
+                item.setEnabled(False)
+                item.setToolTip(local("Requires a layer-shell compositor, such as KDE.", "KDEなどのlayer-shell対応環境が必要です。"))
         self.overlay_mode.setToolTip("")
         fps_row = help_row(QLabel("FPS Counter"), "FPS Counter")
         self._field_labels.append(fps_row)
@@ -324,12 +334,16 @@ class MainWindow(QMainWindow):
         dgrid.addWidget(self.overlay_mode, 2, 1)
 
         self.span_displays = QCheckBox("Span Displays (Experimental)")
+        if "gnome" in desktop:
+            self.span_displays.setEnabled(False)
         self.span_displays.setToolTip("")
         try:
             self.span_displays.setChecked((self.config_dir() / "gamescope-span-enabled").read_text().strip() == "on")
         except FileNotFoundError:
             pass
         self.span_displays.toggled.connect(self.update_resolution_preview)
+        if "gnome" in desktop:
+            self.span_displays.setChecked(False)
 
         self.custom_w = QSpinBox()
         self.custom_h = QSpinBox()
@@ -830,6 +844,8 @@ class MainWindow(QMainWindow):
                 old_style = "text"
             value = ("detailed" if old_style == "graph" else "minimal") if enabled else "off"
         idx = self.overlay_mode.findData(value)
+        if idx >= 0 and not self.overlay_mode.model().item(idx).isEnabled():
+            idx = 0
         self.overlay_mode.setCurrentIndex(idx if idx >= 0 else 0)
 
     def load_mouse_as_touch(self):

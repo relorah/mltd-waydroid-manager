@@ -94,6 +94,7 @@ stop_gamescope() {
 }
 
 gamescope_span_enabled() {
+  [[ "${XDG_CURRENT_DESKTOP:-}" != *[Gg][Nn][Oo][Mm][Ee]* ]] || return 1
   [[ "$(cat "$CFG_DIR/gamescope-span-enabled" 2>/dev/null || echo off)" == on ]]
 }
 
@@ -140,6 +141,15 @@ mode_to_internal() {
     *) return 2 ;;
   esac
 }
+
+mangoapp_supported() (
+  if [[ -r /etc/os-release ]]; then
+    source /etc/os-release
+    [[ "${ID:-}" != ubuntu ]]
+  else
+    return 0
+  fi
+)
 
 read_fsr_scale() {
   local v="125"
@@ -221,6 +231,7 @@ read_overlay_mode() {
     style="$(tr -d '[:space:]' < "$CFG_DIR/performance-overlay-style" 2>/dev/null || true)"
     case "$enabled" in off|0|false|no) v=off ;; *) [[ "$style" == graph ]] && v=detailed || v=minimal ;; esac
   fi
+  if [[ "$v" == mangoapp ]] && ! mangoapp_supported; then v=off; fi
   case "$v" in off|minimal|detailed|mangoapp) printf '%s\n' "$v" ;; *) printf 'off\n' ;; esac
 }
 
@@ -277,7 +288,7 @@ launch_outer() {
   rm -f "$STATE_DIR/mangoapp-active" "$STATE_DIR/mangoapp-failed"
   local mango=off real_candidate
   # Keep MangoApp attached but hidden for MWM HUD modes, so live switching works.
-  if [[ "$overlay" == mangoapp || "$overlay" == off || "$overlay" == minimal || "$overlay" == detailed ]]; then
+  if mangoapp_supported && [[ "$overlay" == mangoapp || "$overlay" == off || "$overlay" == minimal || "$overlay" == detailed ]]; then
     real_candidate="$(command -v mangoapp 2>/dev/null || true)"
     if [[ -n "$real_candidate" ]] && grep -q -- '--mangoapp' <<< "$(gamescope --help 2>&1)"; then
       mango=on
