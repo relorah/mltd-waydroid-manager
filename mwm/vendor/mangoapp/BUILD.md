@@ -44,3 +44,20 @@ The supplemental integer-alignment.patch uses zero context (apply with `git appl
 ## License files
 
 MangoHud: `LICENSE-MangoHud`; ImGui 1.91.6: `LICENSE-ImGui`; ImPlot 0.16: `LICENSE-ImPlot`. `implot-0.16-LICENSE.build` contains the separate Meson development team notice and is retained. Vulkan notices and `LICENSE-BC250-reference` are also retained. Notices embedded in the source archive remain intact.
+
+## Ubuntu host build
+
+`packaging/build-ubuntu-mangoapp.sh` builds the same patched source on Ubuntu,
+including its matching `mangohudctl`. It uses the hash-verified source archive
+here or downloads that exact archive from a pinned MWM commit. Meson wraps pin
+the dependency archives. `use_system_spdlog=disabled` builds private static
+spdlog/fmt to avoid the CachyOS shared-library ABI. The resulting renderer and
+control tool use Ubuntu's glibc, GLFW, GL and X11/Wayland libraries; the bundled
+CachyOS renderer is not selected on Ubuntu.
+
+Outputs are installed only to the user's MWM `.runtime/bin` directory. A build
+identifier records the source hash, recipe revision and host glibc version;
+build logs and the extracted build tree remain in the installer's state folder.
+System MangoApp is not replaced. Existing component notices remain applicable.
+This is an installation/rebuild path, not a claim of Ubuntu or PS5 runtime
+validation. It does not change the Android Mesa/RTScale payload.

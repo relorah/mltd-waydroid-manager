@@ -40,5 +40,13 @@ install_ubuntu_packages() {
   # externally managed system Python; GI/Cairo come from system packages.
   "$BOOTSTRAP_PYTHON" -m venv --system-site-packages "$APP_HOME/.runtime/venv"
   "$APP_HOME/.runtime/venv/bin/python" -m pip install "PySide6>=$PYSIDE6_MIN_VERSION,<7"
-  export PATH="$APP_HOME/.runtime/venv/bin:$PATH"
+  export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:$PATH"
+}
+
+install_ubuntu_mangoapp() {
+  say 'Building MWM MangoApp for Ubuntu'
+  if ! bash "$PACKAGING/build-ubuntu-mangoapp.sh" "$APP_HOME" "$STATE" "$SCRIPT_DIR" \
+      > >(tee "$STATE/mangoapp-build.log") 2>&1; then
+    warn "MangoApp build failed. Use FPS Counter Off; retry install.sh --update-app. Log: $STATE/mangoapp-build.log"
+  fi
 }

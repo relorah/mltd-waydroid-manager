@@ -320,7 +320,7 @@ install_mwm_launcher() {
 
   cat > "$LOCAL_BIN/mwm" <<EOF2
 #!/usr/bin/env bash
-export PATH="$APP_HOME/.runtime/venv/bin:/usr/games:\$PATH"
+export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PATH"
 exec python "$APP_HOME/mwm.py" "\$@"
 EOF2
   chmod +x "$LOCAL_BIN/mwm"
@@ -388,6 +388,7 @@ if (( UPDATE_APP )); then
   [[ -x /usr/local/libexec/mwm-root-helper ]] || die "MWM is not installed; run install.sh without --update-app first."
   if [[ "$HOST_FAMILY" == ubuntu ]]; then
     install_packages
+    install_ubuntu_mangoapp
   fi
   command -v rsync >/dev/null || die "rsync is required"
   if [[ "$HOST_FAMILY" == arch ]] && ! command -v qdbus6 >/dev/null 2>&1; then
@@ -403,6 +404,7 @@ fi
 
 verify_payload
 install_packages
+if [[ "$HOST_FAMILY" == ubuntu ]]; then install_ubuntu_mangoapp; fi
 if [[ "$HOST_FAMILY" == arch ]] && ! command -v mangoapp >/dev/null 2>&1; then
   sudo pacman -S --needed --noconfirm mangohud || warn "MangoApp installation failed; MWM HUD fallback remains available"
 fi

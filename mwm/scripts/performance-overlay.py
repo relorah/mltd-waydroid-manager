@@ -7,7 +7,7 @@ from mangoapp_fps import render_config
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from overlay_owner import hud_instances
-from host_platform import is_ubuntu
+from host_platform import mangoapp_program
 RENDERER=ROOT/'fps_overlay.py'
 CFG=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'mwm'
 STATE=Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'mwm'
@@ -58,10 +58,6 @@ def reconcile(action='sync',if_running=False):
         except FileNotFoundError:mode='off'
         if action=='stop':mode='off'
         if mode not in ('off','minimal','detailed','mangoapp'):raise ValueError('Invalid saved FPS counter mode')
-        if mode == 'mangoapp' and is_ubuntu():
-            stop_huds()
-            print('FPS Counter: MangoApp is not supported on Ubuntu; display disabled')
-            return
         use_mango = mango_running()
         # Stop source/installed HUDs before revealing MangoApp, even when a
         # later mangohudctl operation fails. Their absolute paths may differ.
@@ -73,9 +69,12 @@ def reconcile(action='sync',if_running=False):
             text = render_config(visible)
             CFG.mkdir(parents=True,exist_ok=True)
             temp=cfg.with_suffix('.tmp');temp.write_text(text);temp.replace(cfg)
+            control = mangoapp_program(ROOT, 'mangohudctl')
+            if control is None:
+                raise RuntimeError('MangoApp control is unavailable; rerun install.sh --update-app')
             try:
-                subprocess.run(['mangohudctl','set','reload_config','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
-                subprocess.run(['mangohudctl','set','no_display','0' if visible else '1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
+                subprocess.run([str(control),'set','reload_config','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
+                subprocess.run([str(control),'set','no_display','0' if visible else '1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
             except (OSError,subprocess.SubprocessError) as e:
                 stop_huds()
                 raise RuntimeError('MangoApp visibility could not be updated; check that mangohudctl is installed and the client is running') from e
@@ -84,6 +83,8 @@ def reconcile(action='sync',if_running=False):
                 return
             # Legacy MWM HUD selections hide MangoApp before applying that HUD.
         if mode=='mangoapp':
+            if mangoapp_program(ROOT) is None:
+                raise RuntimeError('MangoApp is unavailable; rerun install.sh --update-app or select Off')
             # MangoApp must be attached when Gamescope starts. Never silently
             # replace the selected renderer with the old Minimal HUD.
             print('FPS Counter: MangoApp saved; Restart is required to start MangoApp')

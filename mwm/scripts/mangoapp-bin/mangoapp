@@ -20,6 +20,10 @@ unset MANGOHUD_CONFIG
 export MANGOHUD_CONFIGFILE="$cfg"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/mwm"
 mkdir -p "$state"
+# Gamescope's reaper respawns an optional overlay. Park later attempts after
+# one failure until a new Gamescope startup clears the latch, rather than
+# repeatedly crashing into libX11/GL while the Android session is healthy.
+if [[ -f "$state/mangoapp-failed" ]]; then exec sleep infinity; fi
 collector_pid=""
 mango_pid=""
 cleanup() {
@@ -41,7 +45,11 @@ fi
 # The bundled, source-built MangoApp aligns only the FPS integer portion.
 # Keep the system executable available as a fallback; never replace it.
 mango_executable="$MWM_REAL_MANGOAPP"
-if [[ -x "$script_dir/mangoapp-native/mangoapp" ]]; then
+if ( source /etc/os-release; [[ "${ID:-}" == ubuntu ]] ); then
+  # The launcher resolved the loadable, Ubuntu-built binary. Never override
+  # it with a bundled CachyOS binary requiring a newer glibc/shared ABI.
+  export MWM_MANGOAPP_FPS_INTEGER_ALIGN=1
+elif [[ -x "$script_dir/mangoapp-native/mangoapp" ]]; then
   mango_executable="$script_dir/mangoapp-native/mangoapp"
   export MWM_MANGOAPP_FPS_INTEGER_ALIGN=1
 fi

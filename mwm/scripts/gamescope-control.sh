@@ -142,15 +142,6 @@ mode_to_internal() {
   esac
 }
 
-mangoapp_supported() (
-  if [[ -r /etc/os-release ]]; then
-    source /etc/os-release
-    [[ "${ID:-}" != ubuntu ]]
-  else
-    return 0
-  fi
-)
-
 read_fsr_scale() {
   local v="125"
   local enabled
@@ -231,7 +222,6 @@ read_overlay_mode() {
     style="$(tr -d '[:space:]' < "$CFG_DIR/performance-overlay-style" 2>/dev/null || true)"
     case "$enabled" in off|0|false|no) v=off ;; *) [[ "$style" == graph ]] && v=detailed || v=minimal ;; esac
   fi
-  if [[ "$v" == mangoapp ]] && ! mangoapp_supported; then v=off; fi
   case "$v" in off|minimal|detailed|mangoapp) printf '%s\n' "$v" ;; *) printf 'off\n' ;; esac
 }
 
@@ -288,18 +278,21 @@ launch_outer() {
   rm -f "$STATE_DIR/mangoapp-active" "$STATE_DIR/mangoapp-failed"
   local mango=off real_candidate
   # Keep MangoApp attached but hidden for MWM HUD modes, so live switching works.
-  if mangoapp_supported && [[ "$overlay" == mangoapp || "$overlay" == off || "$overlay" == minimal || "$overlay" == detailed ]]; then
+  if [[ "$overlay" == mangoapp || "$overlay" == off || "$overlay" == minimal || "$overlay" == detailed ]]; then
     real_candidate="$(command -v mangoapp 2>/dev/null || true)"
+    if [[ -f "$SCRIPT_DIR/mangoapp-runtime.py" ]]; then
+      real_candidate="$(python3 "$SCRIPT_DIR/mangoapp-runtime.py" mangoapp 2>/dev/null || true)"
+    fi
     if [[ -n "$real_candidate" ]] && grep -q -- '--mangoapp' <<< "$(gamescope --help 2>&1)"; then
       mango=on
     else
-      echo "[WARN] MangoApp unavailable; using the MWM HUD" >> "$LOG_FILE"
+      echo "[WARN] MangoApp unavailable; continuing without MangoApp (GNOME: select Off)." >> "$LOG_FILE"
     fi
   fi
   case "$mango" in on|off) ;; *) echo "Invalid MangoApp setting" >&2; return 2;; esac
   if [[ "$mango" == on ]]; then
     local real_mango
-    real_mango="$(command -v mangoapp)" || { echo "MangoApp requires mangohud; run install.sh" >&2; return 127; }
+    real_mango="$real_candidate"
     grep -q -- '--mangoapp' <<< "$(gamescope --help 2>&1)" || { echo "Gamescope lacks --mangoapp support" >&2; return 2; }
     # In a dual pipeline instrument the inner compositor that receives Waydroid frames.
     local index inner_index=-1

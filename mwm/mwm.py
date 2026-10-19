@@ -319,8 +319,7 @@ class MainWindow(QMainWindow):
         self.overlay_mode.addItem("Detailed", "detailed")
         self.overlay_mode.addItem("MangoApp", "mangoapp")
         if is_ubuntu():
-            self.overlay_mode.model().item(3).setEnabled(False)
-            self.overlay_mode.model().item(3).setToolTip(local("MangoApp is not supported on Ubuntu.", "UbuntuではMangoAppは未対応です。"))
+            self.overlay_mode.model().item(3).setToolTip(local("Uses the MWM MangoApp built during installation on Ubuntu.", "インストール時にUbuntu上でビルドしたMWM版MangoAppを使用します。"))
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower().split(":")
         if "gnome" in desktop:
             for index in (1, 2):

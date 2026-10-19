@@ -12,9 +12,11 @@ MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理す
 
 Ubuntu対応のインストール処理は追加済みですが、Ubuntu実機での動作確認は未実施です。Ubuntu 26.04 LTSではGamescopeを公式multiverseから導入します。24.04 LTSはGamescopeのAPT候補がないため、必要な起動オプションを備えたGamescope 3.16系を先に用意してください。異なるUbuntu版のパッケージを混在させないでください。
 
-UbuntuではPySide6をMWM配下の`.runtime/venv`へ導入します。システムPythonへのpip導入を避け、更新時もこの専用環境を保持します。
+UbuntuではPySide6をMWM配下の`.runtime/venv`へ導入します。システムPythonへのpip導入を避け、更新時もこの専用環境を保持します。MWM版MangoAppと表示切替用のmangohudctlはUbuntu上でビルドし、`.runtime/bin`へ配置します。初回はビルド用パッケージと依存ソースの取得が必要です。同じソース・ビルド手順・glibcで作成済みの場合は再ビルドを省略します。
 
-UbuntuではMangoAppは未対応です。標準GNOMEのWaylandセッションではFPS CounterはOffで使用します。Minimal／Detailedはlayer-shell対応環境（KDEなど）で使用できます。KDE用のウィンドウ位置・サイズ補助やSpan DisplaysはGNOMEでは利用できません。
+標準GNOMEのWaylandセッションではFPS CounterはMangoAppまたはOffを選択します。MangoAppはGamescope内のXwaylandで表示するため、ホストのGNOMEにlayer-shellは不要です。Minimal／Detailedはlayer-shell対応環境（KDEなど）で使用できます。KDE用のウィンドウ位置・サイズ補助やSpan DisplaysはGNOMEでは利用できません。
+
+MangoAppのビルドに失敗した場合はFPS CounterをOffにして使用できます。通常`~/.local/state/mwm-setup/mangoapp-build.log`を確認し、`./install.sh --update-app`で再試行してください。MangoAppが起動後に異常終了した場合は繰り返し再起動せず、次回Start／Restartまでカウンターを停止します。Ubuntu／PS5用Ubuntuイメージでの実機表示・ゲーム動作は未確認です。
 
 ## 導入するもの
 
