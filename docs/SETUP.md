@@ -1,10 +1,10 @@
-# MLTD Waydroid Manager (MWM) 1.00 Setup Guide
+# MLTD Waydroid Manager (MWM) 0.96 Setup Guide
 
 MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理するツールです。
 
-## MWM 1.00
+## MWM 0.96: PS5 Linux（Ubuntu 26.04）対応
 
-Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加し、PS5 Linux 7.1.7環境での基本起動を確認しました。実機ではミリシタのタイトル画面とAndroid通信までを確認しています。ウマ娘・シャニソン、および長時間プレイ時の安定性は未確認です。UbuntuのAPT処理は不足分のみを対象とし、全体更新、PS5カーネル/Mesa/firmwareの置換、パッケージ削除、配布元追加を行いません。
+Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタのタイトル画面起動とAndroid通信を確認しています。ウマ娘・シャニソン、ゲームプレイ全般、他のUbuntu版・カーネルでの動作は未確認です。UbuntuのAPT処理は不足分のみを対象とし、全体更新、PS5カーネル/Mesa/firmwareの置換、パッケージ削除、配布元追加を行いません。
 
 ## 対象環境
 
@@ -14,7 +14,7 @@ Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルド
 
 描画バックエンドはGamescopeです。主な動作確認環境はKDE Plasma／WaylandとAMD GPUです。
 
-Ubuntu 26.04.1／PS5 Linux 7.1.7／GNOME Waylandの実機で、専用ランタイム構築、退避後の描画ライブラリ適用、Gamescope経由のミリシタタイトル画面とAndroid通信を確認しました。ゲームプレイ、RTScale有効時、他のUbuntu版は未検証です。Ubuntu 26.04 LTSではGamescopeを公式multiverseから導入します。24.04 LTSはGamescopeのAPT候補がないため、必要な起動オプションを備えたGamescope 3.16系を先に用意してください。異なるUbuntu版のパッケージを混在させないでください。
+PS5 Linux（Ubuntu 26.04.1、kernel 7.1.7）／GNOME Waylandの実機で、専用ランタイム構築、退避後の描画ライブラリ適用、Gamescope経由のミリシタタイトル画面とAndroid通信を確認しました。ゲームプレイ、RTScale有効時、他のUbuntu版は未検証です。Ubuntu 26.04 LTSではGamescopeを公式multiverseから導入します。24.04 LTSはGamescopeのAPT候補がないため、必要な起動オプションを備えたGamescope 3.16系を先に用意してください。異なるUbuntu版のパッケージを混在させないでください。
 
 Ubuntuの依存導入は不足分だけを対象とし、APT計画と実際のdebでカーネル・Mesa・GPUランタイム・firmwareの変更と削除を拒否します。PS5用ホスト構成を保持するため、mesa-vulkan-driversは導入対象から外しています。必要なVulkan機能はホスト側で動作確認済みであることが前提です。配布元は自動追加しません。Gamescope候補がない場合は同じUbuntu版の公式universe／multiverse設定を確認してください。MangoAppのビルド依存はホストに導入せず、専用SDK内へ展開します。
 
