@@ -4,7 +4,7 @@ MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理す
 
 ## MWM 0.96: PS5 Linux（Ubuntu 26.04）対応
 
-Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタのタイトル画面起動とAndroid通信を確認しています。ウマ娘・シャニソン、ゲームプレイ全般、他のUbuntu版・カーネルでの動作は未確認です。UbuntuのAPT処理は不足分のみを対象とし、全体更新、PS5カーネル/Mesa/firmwareの置換、パッケージ削除、配布元追加を行いません。
+Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタ起動とライブMVの動作を確認しています。
 
 ## 対象環境
 
