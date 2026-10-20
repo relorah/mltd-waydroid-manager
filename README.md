@@ -4,7 +4,7 @@ Linux + AMD GPU環境で「アイドルマスター ミリオンライブ！ シ
 
 ## 謝辞
 
-Mesa GLES Render Scale（以下、RTScale）の技術情報を公開した[mogareta7731氏](https://zenn.dev/mogareta7731)、ならびにMesa・Waydroid・Gamescope・MangoHudなどの開発者に感謝します。
+Mesa GLES Render Scale（以下、RTScale）の技術情報を公開した[mogareta7731氏](https://zenn.dev/mogareta7731)、ならびにMesa・Waydroid・Gamescope・MangoHudなどの開発者、MWMの動作テストに協力してくださったはうあみ氏に感謝します。
 
 MWMで使用するRTScaleは、mogareta7731氏が公開した技術情報をもとに独立実装したものです。
 
