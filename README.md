@@ -25,8 +25,8 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 
 ### 一旦愛して♡ — 3D高画質
 
-<details Open>
-<summary>4人並びカット（クリックで収納）</summary>
+<details>
+<summary>4人並びカット（クリックで展開）</summary>
 
 ![3D高画質 RTScale OFF と x3：4人並びカット](docs/images/readme/ittan_aishite/high_off-vs-high_x3_anna_wide.webp)
 
@@ -34,8 +34,8 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 
 </details>
 
-<details Open>
-<summary>4分割カット（クリックで収納）</summary>
+<details>
+<summary>4分割カット（クリックで展開）</summary>
 
 ![3D高画質 RTScale OFF と x3：4分割カット](docs/images/readme/ittan_aishite/high_off-vs-high_x3_mirai_split.webp)
 
@@ -45,8 +45,8 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 
 ### Thank You! — 39人ライブ / 3D高画質
 
-<details Open>
-<summary>16:9と32:9の比較（クリックで収納）</summary>
+<details>
+<summary>16:9と32:9の比較（クリックで展開）</summary>
 
 ![Thank You! 39人ライブ：16:9と32:9の比較](docs/images/readme/thank_you/high_x3-fsr_aspect-comparison.webp)
 
@@ -84,6 +84,8 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 ## 導入と設定
 
 インストールや更新、使い方などは[docs/SETUP.md](docs/SETUP.md)を参照してください。
+
+Waydroid上でのミリシタの動作環境構築には、[MLTD Waydroid Installer（MWI）](https://github.com/relorah/mltd-waydroid-installer)が利用できます。
 
 ## 開発状況
 
