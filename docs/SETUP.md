@@ -4,7 +4,7 @@ MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理す
 
 ## MWM 0.96: PS5 Linux（Ubuntu 26.04）対応
 
-Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタ起動とライブMVの動作を確認しています。
+Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタ起動とライブMVの動作を確認しています。PS5でMSAA x2を使用した際に画面のちらつきが発生することがあります。
 
 ## 対象環境
 
@@ -14,15 +14,6 @@ Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルド
 
 描画バックエンドはGamescopeです。主な動作確認環境はKDE Plasma／WaylandとAMD GPUです。
 
-PS5 Linux（Ubuntu 26.04.1、kernel 7.1.7）／GNOME Waylandの実機で、専用ランタイム構築、退避後の描画ライブラリ適用、Gamescope経由のミリシタタイトル画面とAndroid通信を確認しました。ゲームプレイ、RTScale有効時、他のUbuntu版は未検証です。Ubuntu 26.04 LTSではGamescopeを公式multiverseから導入します。24.04 LTSはGamescopeのAPT候補がないため、必要な起動オプションを備えたGamescope 3.16系を先に用意してください。異なるUbuntu版のパッケージを混在させないでください。
-
-Ubuntuの依存導入は不足分だけを対象とし、APT計画と実際のdebでカーネル・Mesa・GPUランタイム・firmwareの変更と削除を拒否します。PS5用ホスト構成を保持するため、mesa-vulkan-driversは導入対象から外しています。必要なVulkan機能はホスト側で動作確認済みであることが前提です。配布元は自動追加しません。Gamescope候補がない場合は同じUbuntu版の公式universe／multiverse設定を確認してください。MangoAppのビルド依存はホストに導入せず、専用SDK内へ展開します。
-
-UbuntuではPySide6をMWM配下の`.runtime/venv`へ導入します。システムPythonへのpip導入を避け、更新時もこの専用環境を保持します。MWM版MangoAppと表示切替用のmangohudctlはUbuntu上でビルドし、`.runtime/bin`へ配置します。初回はビルド用パッケージと依存ソースの取得が必要です。ビルド用パッケージはAPTから専用SDKへ展開し、ホストにはインストールしません。SDKのパッケージ名・SHA-256は`.runtime/build-sdk/<plan>/packages.json`に記録します。同じソース・ビルド手順・glibcで作成済みの場合は再ビルドを省略します。
-
-標準GNOMEのWaylandセッションではFPS CounterはMangoAppまたはOffを選択します。MangoAppはGamescope内のXwaylandで表示するため、ホストのGNOMEにlayer-shellは不要です。Minimal／Detailedはlayer-shell対応環境（KDEなど）で使用できます。KDE用のウィンドウ位置・サイズ補助やSpan DisplaysはGNOMEでは利用できません。
-
-MangoAppのビルドに失敗した場合はFPS CounterをOffにして使用できます。通常`~/.local/state/mwm-setup/mangoapp-build.log`を確認し、`./install.sh --update-app`で再試行してください。MangoAppが起動後に異常終了した場合は繰り返し再起動せず、次回Start／Restartまでカウンターを停止します。PS5上でMangoAppの起動を確認しています。ゲーム中のFPS表示、RTScale、FSRの組合せは別途検証が必要です。横線が出るとの報告があるため、表示の長時間安定性は未確認です。
 
 ## 導入するもの
 
@@ -105,18 +96,6 @@ Off／Minimal／Detailed／MangoAppから選択します。MinimalとDetailedは
 | CPU／GPU | ホスト側の負荷。ミリシタ単体の使用率ではありません。 |
 
 FPS Counterの表示方式は、起動中でも切り替えられます。
-
-### Gamescopeの120 FPS上限（0.92）
-
-Gamescopeの仮想画面を120 Hzで起動し、ゲーム側のFPS上限も既定で120 FPSにします。二段FSRでは内側・外側の両方に仮想120 Hzを指定します。モニタ自体のHzは変更しません。ゲームの描画速度を120 FPSへ引き上げる機能ではありません。
-
-起動直後のFPS低下を拾って上限を下げないよう、自動判定は既定で無効です。検証環境では、再起動後に57 FPSへの張り付きが解消し、モニタ120 Hz／200 Hzで負荷が同じになったことを確認しています。他の環境で同じ結果になる保証はありません。
-
-高度な設定として `~/.config/mwm/gamescope-fps-limit` に `120`、`60`、`off`、`auto` のいずれか1行を書けます。未作成は `120` です。`off` は実行時のFPS上限制御を解除しますが、起動時の仮想120 Hz指定は維持します。設定ファイルの変更は起動中に読み取られます。仮想画面の起動指定を反映するにはStart／Restartが必要です。
-
-`auto` は試験機能です。約5秒間の安定した実測値から60／120 FPSを選び、一時的な低下には追従しません。一度60 FPSに制限すると120 FPSを計測できないため、約10秒間有効なフレームがない場合やGamescope再起動時に判定をやり直します。ゲーム側をプレイ中に120 FPSへ切り替える場合は固定 `120` を使ってください。安定した60／120 FPSを確認できない間は120 FPS上限を維持します。
-
-実行時制御にはGamescope付属の `gamescopectl debug_set_fps_limit` を使用します。利用できない場合はログへ警告し、通常の起動を続けます。仮想120 Hz指定は引き続き有効です。`auto` の計測値はFPS表示と共有し、重複したSurfaceFlinger問い合わせを避けます。
 
 ### BC250のGPU使用率（試験機能）
 
