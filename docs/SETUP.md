@@ -4,7 +4,7 @@ MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理す
 
 ## 対象環境
 
-- CachyOS／Arch系LinuxまたはUbuntu 24.04以降、x86_64、AMD GPU、Wayland。
+- CachyOS／Arch系LinuxまたはUbuntu 26.04 LTS、x86_64、AMD GPU、Wayland。
 - Waydroid Android 11、Google Play、Native Bridge／ARM変換を導入済みで、ミリシタが正常動作すること。
 - sudo権限と、依存パッケージ取得用のネットワーク。
 
@@ -92,7 +92,7 @@ Off／Minimal／Detailed／MangoAppから選択します。MinimalとDetailedは
 | グラフ：MangoApp | Gamescope側のフレーム時間です。Android側のFPS表示とは計測対象が異なるため、一定の時間差（ms）には換算できません。 |
 | CPU／GPU | ホスト側の負荷。ミリシタ単体の使用率ではありません。 |
 
-FPS Counterの表示方式は、起動中でも切り替えられます。
+FPS Counterの表示方式はミリシタ起動中でも変更でき、Applyを押すと即時に切り替わります。
 
 ### BC250のGPU使用率（試験機能）
 
