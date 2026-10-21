@@ -442,4 +442,5 @@ Do not add a binary dependency to a public release without documenting where it 
 - Runtime payload lives in packaging/payload; development tests live in packaging/tests.
 - Normal distribution ZIPs exclude tests, development tools and verification records.
 - docs contains SETUP.md and RTScale correction/verification material only. General investigations, release-preparation notes and image galleries stay local.
-- Edit README.md only when the user explicitly supplies or requests its content. Do not append routine update history to README or create changelog documents.
+- Edit README.md only when the user explicitly supplies or requests its content.
+- README.md and docs/SETUP.md are current user guides, not release notes. Never add update-history sections, version announcement headings, or descriptions such as "added" / "changed" / "fixed" to them. Put current requirements, usage and confirmed conditions in the relevant sections, and defects or unverified scope under known issues. Keep build internals and chronological verification records out of these guides. Do not create changelog documents.

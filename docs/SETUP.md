@@ -2,10 +2,6 @@
 
 MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理するツールです。
 
-## MWM 0.96: PS5 Linux（Ubuntu 26.04）対応
-
-Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルドを追加しました。PS5 Linux 7.1.7／Ubuntu 26.04.1／GNOME Waylandの実機で、MWMからミリシタ起動とライブMVの動作を確認しています。PS5でMSAA x2を使用した際に画面のちらつきが発生することがあります。
-
 ## 対象環境
 
 - CachyOS／Arch系LinuxまたはUbuntu 24.04以降、x86_64、AMD GPU、Wayland。
@@ -14,6 +10,7 @@ Ubuntu 26.04向けの安全な依存導入と専用SDK内でのMangoAppビルド
 
 描画バックエンドはGamescopeです。主な動作確認環境はKDE Plasma／WaylandとAMD GPUです。
 
+PS5 Linux（kernel 7.1.7／Ubuntu 26.04.1／GNOME Wayland）では、MWMからのミリシタ起動とライブMVの動作を確認しています。
 
 ## 導入するもの
 
@@ -110,6 +107,7 @@ touch "${XDG_CONFIG_HOME:-$HOME/.config}/mwm/bc250-gpu-test"
 
 ## 既知の不具合・未検証事項
 
+- PS5でMSAA x2を使用した際に、画面のちらつきが発生することがあります。
 - **確認済み**：ガシャの一枚絵が異常に拡大される現象を目視確認しています。
 - **未検証**：ガシャ演出中のSSRの3Dモデル表示は未検証です。
 
