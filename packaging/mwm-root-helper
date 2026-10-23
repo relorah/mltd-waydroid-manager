@@ -26,6 +26,15 @@ import stat
 import sys
 
 try:
+    # Enable the upstream fan curve before raising either clock. Keep cooling
+    # enabled after Boost OFF and on partial failure; never stop a hot fan.
+    fan = os.open('/dev/icc', os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        if not stat.S_ISCHR(os.fstat(fan).st_mode):
+            raise OSError('PS5 ICC character device unavailable')
+        fcntl.ioctl(fan, 0x40014901, b'\x01')
+    finally:
+        os.close(fan)
     fd = os.open('/dev/mp1', os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
         if not stat.S_ISCHR(os.fstat(fd).st_mode):
@@ -36,7 +45,7 @@ try:
 except OSError as error:
     print('PS5 Boost Mode failed: ' + str(error), file=sys.stderr)
     sys.exit(1)
-print('PS5 Boost Mode: ' + sys.argv[1])
+print('PS5 Boost Mode: ' + sys.argv[1] + '; fan curve: on')
 PY
     ;;
   logcat-dump)

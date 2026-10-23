@@ -407,7 +407,8 @@ class MainWindow(QMainWindow):
         self.ps5_boost.setCheckState(Qt.CheckState.PartiallyChecked)
         self.ps5_boost_status = QLabel()
         try:
-            ps5_available = stat.S_ISCHR(os.lstat("/dev/mp1").st_mode)
+            ps5_available = all(stat.S_ISCHR(os.lstat(path).st_mode)
+                                for path in ("/dev/mp1", "/dev/icc"))
         except OSError:
             ps5_available = False
         self.ps5_boost.setEnabled(ps5_available)
