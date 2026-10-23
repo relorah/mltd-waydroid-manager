@@ -4,6 +4,7 @@ import json
 from settings_safety import commit as commit_settings, recover as recover_settings
 import os
 import signal
+import stat
 import shutil
 import subprocess
 import sys
@@ -401,6 +402,24 @@ class MainWindow(QMainWindow):
         assist.v.addWidget(help_row(self.zoom_fix, "RTScale Zoom Fix"))
         self.zoom_fix.toggled.connect(self.update_msaa_controls)
         hv.addWidget(assist)
+        self.ps5_boost = QCheckBox("PS5 Linux Boost Mode")
+        self.ps5_boost.setTristate(True)
+        self.ps5_boost.setCheckState(Qt.CheckState.PartiallyChecked)
+        self.ps5_boost_status = QLabel()
+        try:
+            ps5_available = stat.S_ISCHR(os.lstat("/dev/mp1").st_mode)
+        except OSError:
+            ps5_available = False
+        self.ps5_boost.setEnabled(ps5_available)
+        self.ps5_boost_status.setText(local("State unknown", "状態不明") if ps5_available
+                                      else local("Unavailable on this system", "この環境では利用できません"))
+        self._ps5_boost_state = Qt.CheckState.PartiallyChecked
+        self.ps5_boost.clicked.connect(self.change_ps5_boost)
+        boost_row = QHBoxLayout()
+        boost_row.addWidget(help_row(self.ps5_boost, "PS5 Linux Boost Mode"))
+        boost_row.addStretch(1)
+        boost_row.addWidget(self.ps5_boost_status)
+        hv.addLayout(boost_row)
         hv.addSpacing(48)
         hv.addStretch(1)
         self.tabs.addTab(home, "Home")
@@ -787,6 +806,32 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self.update_action_buttons)
         self.worker.start()
         self.update_action_buttons()
+
+    def change_ps5_boost(self):
+        """Immediate host control, separate from saved Waydroid settings."""
+        previous = self._ps5_boost_state
+        if self.worker and self.worker.isRunning():
+            self.ps5_boost.setCheckState(previous)
+            return
+        enabled = self.ps5_boost.isChecked()
+        self.ps5_boost.setTristate(False)
+        self.ps5_boost_status.setText(local("Applying...", "反映中…"))
+
+        def finished(rc, out):
+            if rc == 0:
+                self._ps5_boost_state = (Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+                self.ps5_boost_status.setText("ON" if enabled else "OFF")
+            else:
+                self.ps5_boost_status.setText(local("Failed; state unknown", "変更失敗・状態不明"))
+                self._ps5_boost_state = Qt.CheckState.PartiallyChecked
+                self.ps5_boost.setTristate(True)
+                QMessageBox.warning(self, "PS5 Linux Boost Mode", local(
+                    "Could not change Boost Mode. Update MWM with ./install.sh --update-app and check the log.",
+                    "Boost Modeを変更できませんでした。./install.sh --update-appでMWMを更新し、ログをご確認ください。"))
+            self.ps5_boost.setCheckState(self._ps5_boost_state)
+
+        self.async_run(["sudo", "-n", "/usr/local/libexec/mwm-root-helper",
+                        "ps5-boost", "on" if enabled else "off"], callback=finished, timeout=10)
 
     def load_current_scale(self):
         if self.backend.currentData() == "gamescope" and getattr(self, "_loaded_render_mode", "fsr") == "fsr":

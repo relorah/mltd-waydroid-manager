@@ -81,6 +81,12 @@ Super（Windows）＋Fで全画面とウィンドウを切り替えます。複�
 
 Verify ONの場合、ミリシタの起動処理中はMWMの操作を制限します。途中でミリシタを手動起動すると処理を中断するため、ゲームを終了してStart／Restartをやり直してください。
 
+### PS5 Linux Boost Mode
+
+メイン画面下部のチェックでPS5本体のBoost Modeを即時にON／OFFします。ApplyやRestartは不要です。PS5の専用デバイスがない環境では操作できません。
+
+起動時は「状態不明」と表示します。ON／OFF表示は今回のMWMで最後に成功した操作を示し、外部ツールによる変更は追跡しません。設定はシステム全体に適用され、MWM終了時にも維持されます。ONでは消費電力や発熱が増える場合があります。
+
 ## FPS Counter
 
 Off／Minimal／Detailed／MangoAppから選択します。MinimalとDetailedはMWM HUD、MangoAppはGamescope内のカウンターです。
