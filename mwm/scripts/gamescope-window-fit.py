@@ -148,6 +148,7 @@ def main():
     previous={}
     pending={}
     fitted=set()
+    span_initialized=False
     resize_script=ResizeScript(args.pid)
     def terminate(signum, frame):
         raise SystemExit(0)
@@ -156,7 +157,19 @@ def main():
         while identity is not None and process_identity(args.pid)==identity:
             pids=descendants(args.pid)
             if span is not None:
-                query(pids,geometry=span,span=True)
+                state=query(pids)
+                if state and not state['minimized']:
+                    # Expand once at startup; later fullscreen is allowed on
+                    # one display. Restore the span whenever it becomes windowed.
+                    if not span_initialized or not state['fullscreen']:
+                        try:
+                            latest=json.loads(args.span_layout.read_text())
+                            if all(k in latest for k in ('x','y','width','height')):
+                                span=latest
+                        except (OSError,ValueError):
+                            pass
+                        query(pids,geometry=span,span=True)
+                        span_initialized=True
                 time.sleep(.35)
                 continue
             state=query(pids)
@@ -170,7 +183,7 @@ def main():
                     pending.pop(key,None)
                 elif full:
                     pending.pop(key,None)
-                elif key not in fitted and previous.get(key,True) and not state['minimized']:
+                elif previous.get(key,True) and not state['minimized']:
                     pending[key]=time.monotonic()+.6
                 previous[key]=full
                 if key in pending and time.monotonic()>=pending[key] and not state['minimized']:

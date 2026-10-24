@@ -35,6 +35,16 @@ class CaptureTests(unittest.TestCase):
             wire = client.sendall.call_args.args[0]
             self.assertTrue(wire.endswith(screenshot.message(4,2,screenshot.string(str(path))+struct.pack('<II',3,0))))
 
+    def test_nested_compositor_uses_outer_window_owner(self):
+        def read_stat(path, *args, **kwargs):
+            pid=int(str(path).split('/')[2])
+            return f"{pid} (process) S { {10:20,20:30,30:1}[pid]}"
+        def resolve_exe(path, *args, **kwargs):
+            pid=int(str(path).split('/')[2])
+            return Path('/usr/bin/gamescope' if pid in (10,20) else '/usr/bin/bash')
+        with patch.object(Path, 'read_text', read_stat), patch.object(Path, 'resolve', resolve_exe):
+            self.assertEqual(screenshot.gamescope_ancestor(10),20)
+
     def test_focused_owner_only(self):
         from PySide6.QtCore import QCoreApplication
         from PySide6.QtQml import QJSEngine

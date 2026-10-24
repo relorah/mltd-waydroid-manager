@@ -98,16 +98,21 @@ def process_identity(pid):
         return None
 
 
-def gamescope_ancestor():
-    pid = os.getppid()
+def gamescope_ancestor(start_pid=None):
+    pid = os.getppid() if start_pid is None else start_pid
+    outer = None
     for _ in range(32):
         try:
             fields = Path(f'/proc/{pid}/stat').read_text().rsplit(') ', 1)[1].split()
             if Path(f'/proc/{pid}/exe').resolve().name == 'gamescope':
-                return pid
+                outer = pid
             pid = int(fields[1])
+            if pid <= 1:
+                break
         except (OSError, IndexError, ValueError):
             break
+    if outer is not None:
+        return outer
     raise RuntimeError('Could not identify the owning Gamescope process')
 
 
@@ -122,6 +127,8 @@ def shortcut_script(pid):
     # Match the compositor process, not a generic Gamescope window/class.
     return '''var accepted = registerShortcut("MWM F12 Screenshot", "MWM F12 Screenshot", "F12", function () {
     var w = workspace.activeWindow;
+    callDBus("org.mwm.Screenshot", "/Screenshot", "org.mwm.Screenshot", "ShortcutObserved",
+        JSON.stringify({pid:w?Number(w.pid):0, minimized:w?!!w.minimized:false}));
     if (w && Number(w.pid) === %d && !w.minimized) {
         callDBus("org.mwm.Screenshot", "/Screenshot", "org.mwm.Screenshot", "Capture");
     }
@@ -139,7 +146,7 @@ def main():
 
     owner = int(sys.argv[1])
     identity = process_identity(owner)
-    target = gamescope_ancestor()
+    target = gamescope_ancestor(owner)
     target_identity = process_identity(target)
     if identity is None or target_identity is None:
         raise RuntimeError('Gamescope session has already exited')
@@ -177,6 +184,10 @@ def main():
                 return
             status('F12: enabled (KDE shortcut; focused MWM game only)' if accepted else
                    'F12 unavailable: shortcut registration refused; check Plasma Shortcuts')
+
+        @Slot(str)
+        def ShortcutObserved(self, details):
+            print(f'F12 received: target={target} active={details}', flush=True)
 
         @Slot()
         def Capture(self):
