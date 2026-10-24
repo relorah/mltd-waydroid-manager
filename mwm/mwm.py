@@ -413,7 +413,7 @@ class MainWindow(QMainWindow):
         assist.v.addWidget(help_row(self.verify_startup, "Verify Waydroid Startup"))
 
         assist.v.addWidget(help_row(self.auto_start, "Auto Launch Mirishita"))
-        self.f12_screenshot = QCheckBox("F12 Screenshot (Experimental)")
+        self.f12_screenshot = QCheckBox("F12 Screenshot")
         try:
             self.f12_screenshot.setChecked((self.config_dir() / "f12-screenshot-enabled").read_text().strip() == "on")
         except OSError:
