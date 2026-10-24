@@ -194,9 +194,9 @@ gamescope_sharpness_option() {
   fi
 }
 read_window_mode() {
-  # Restore the known-working 0.5.72 Wayland presentation path. Window/fullscreen
-  # switching is handled by Super+F after startup, without changing backend.
-  echo fullscreen
+  # Dual Display starts borderless; KWin expands it across the monitor canvas.
+  # Keep the native Wayland backend and single-display fullscreen behavior.
+  if gamescope_span_enabled; then echo windowed; else echo fullscreen; fi
 }
 
 read_fg_mode() {
@@ -323,7 +323,9 @@ launch_outer() {
 outer_backend() {
   # Native Wayland presents dmabufs, bypassing MAKO's Vulkan swapchain hooks.
   # SDL is the workaround candidate for native-Wayland windowed surface loss.
-  if [[ "$1" != off || "$(read_window_mode)" == windowed ]]; then
+  if gamescope_span_enabled && [[ "$1" == off ]]; then
+    echo wayland
+  elif [[ "$1" != off || "$(read_window_mode)" == windowed ]]; then
     echo sdl
   else
     echo wayland
