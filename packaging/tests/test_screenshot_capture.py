@@ -45,6 +45,29 @@ class CaptureTests(unittest.TestCase):
         with patch.object(Path, 'read_text', read_stat), patch.object(Path, 'resolve', resolve_exe):
             self.assertEqual(screenshot.gamescope_ancestor(10),20)
 
+    def test_bezel_capture_uses_inner_socket_without_changing_environment(self):
+        env = {'GAMESCOPE_WAYLAND_DISPLAY':'gamescope-0', 'XDG_RUNTIME_DIR':'/run/user/test'}
+        descendants = [(1, 20, dict(env)), (3, 30, dict(env, GAMESCOPE_WAYLAND_DISPLAY='gamescope-1'))]
+        with patch.dict('os.environ', env), patch.object(screenshot, 'outer_effect', return_value='MWM-Bezel-17p5-Copy.fx'), patch.object(screenshot, 'descendant_environments', return_value=descendants), patch.object(screenshot, 'process_identity', return_value='token'):
+            self.assertEqual(screenshot.capture_source(10), ('gamescope-1','/run/user/test','before bezel compensation'))
+            self.assertEqual(screenshot.os.environ['GAMESCOPE_WAYLAND_DISPLAY'],'gamescope-0')
+
+    def test_ordinary_capture_keeps_outer_composition(self):
+        with patch.dict('os.environ', {'GAMESCOPE_WAYLAND_DISPLAY':'gamescope-0','XDG_RUNTIME_DIR':'/run/user/test'}), patch.object(screenshot, 'outer_effect', return_value='OtherEffect.fx'), patch.object(screenshot, 'descendant_environments') as discover:
+            self.assertEqual(screenshot.capture_source(10), ('gamescope-0','/run/user/test','display'))
+            discover.assert_not_called()
+
+    def test_missing_inner_socket_does_not_save_distorted_fallback(self):
+        with patch.dict('os.environ', {'GAMESCOPE_WAYLAND_DISPLAY':'gamescope-0','XDG_RUNTIME_DIR':'/run/user/test'}), patch.object(screenshot, 'outer_effect', return_value='MWM-Bezel-17p5-Copy.fx'), patch.object(screenshot, 'descendant_environments', return_value=[]):
+            with self.assertRaisesRegex(RuntimeError,'inner Gamescope'):
+                screenshot.capture_source(10)
+
+    def test_effect_detection_refuses_another_session(self):
+        properties='GAMESCOPE_PID(CARDINAL) = 999\nGAMESCOPE_RESHADE_EFFECT(STRING) = "MWM-Bezel-17p5-Copy.fx"'
+        with patch.dict('os.environ', {'DISPLAY':':1'}), patch.object(screenshot.subprocess,'check_output',return_value=properties):
+            with self.assertRaisesRegex(RuntimeError,'does not belong'):
+                screenshot.outer_effect(10)
+
     def test_focused_owner_only(self):
         from PySide6.QtCore import QCoreApplication
         from PySide6.QtQml import QJSEngine

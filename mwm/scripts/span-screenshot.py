@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Experimental outer Gamescope capture; never stitches desktop screenshots."""
+"""Gamescope capture with bezel-free routing; never stitches desktop screenshots."""
 import datetime
 import json
 import os
@@ -21,10 +21,11 @@ def message(obj, opcode, data=b''):
     return struct.pack('<II', obj, ((8 + len(data)) << 16) | opcode) + data
 
 
-def request_capture(path):
-    """Bind Gamescope control v3 on the OUTER compositor's private socket."""
-    display = os.environ['GAMESCOPE_WAYLAND_DISPLAY']
-    address = display if display.startswith('/') else str(Path(os.environ['XDG_RUNTIME_DIR']) / display)
+def request_capture(path, display=None, runtime_dir=None):
+    """Bind Gamescope control v3 on the selected compositor's private socket."""
+    display = display or os.environ['GAMESCOPE_WAYLAND_DISPLAY']
+    runtime_dir = runtime_dir or os.environ.get('XDG_RUNTIME_DIR', '')
+    address = display if display.startswith('/') else str(Path(runtime_dir) / display)
     with socket.socket(socket.AF_UNIX) as client:
         client.settimeout(5)
         client.connect(address)
@@ -82,12 +83,72 @@ def pictures_dir():
     return (Path(value) if value and Path(value).is_absolute() else Path.home() / 'Pictures') / 'MWM'
 
 
-def capture(state):
+def outer_effect(target):
+    """Query only the X server owned by the focused session's outer compositor."""
+    display = os.environ.get('DISPLAY')
+    if not display:
+        raise RuntimeError('Screenshot display unavailable')
+    properties = subprocess.check_output(
+        ['xprop', '-display', display, '-root', 'GAMESCOPE_PID', 'GAMESCOPE_RESHADE_EFFECT'],
+        text=True, stderr=subprocess.STDOUT, timeout=3)
+    import re
+    owner = re.search(r'GAMESCOPE_PID\(CARDINAL\) = (\d+)', properties)
+    if not owner or int(owner.group(1)) != target:
+        raise RuntimeError('Screenshot X server does not belong to this MWM session')
+    effect = re.search(r'GAMESCOPE_RESHADE_EFFECT\([^)]*\) = "([^"]*)"', properties)
+    return effect.group(1) if effect else ''
+
+
+def descendant_environments(root):
+    """Include children created by compositor worker threads, not just its main thread."""
+    pending = [(root, 0)]
+    seen = set()
+    result = []
+    while pending:
+        pid, depth = pending.pop(0)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        try:
+            for task in Path(f'/proc/{pid}/task').glob('*/children'):
+                try:
+                    pending.extend((int(child), depth + 1) for child in task.read_text().split())
+                except OSError:
+                    pass
+            values = Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+            env = dict(value.decode(errors='surrogateescape').split('=', 1)
+                       for value in values if b'=' in value)
+            result.append((depth, pid, env))
+        except OSError:
+            pass
+    return result
+
+
+def capture_source(target):
+    """Keep ordinary screenshots unchanged; bypass only the local bezel output shader."""
+    outer = os.environ['GAMESCOPE_WAYLAND_DISPLAY']
+    runtime = os.environ.get('XDG_RUNTIME_DIR', '')
+    if not outer_effect(target).startswith('MWM-Bezel-'):
+        return outer, runtime, 'display'
+    candidates = [(depth, pid, env) for depth, pid, env in descendant_environments(target)
+                  if env.get('GAMESCOPE_WAYLAND_DISPLAY')
+                  and env['GAMESCOPE_WAYLAND_DISPLAY'] != outer
+                  and env.get('XDG_RUNTIME_DIR', runtime) == runtime]
+    if not candidates:
+        raise RuntimeError('Bezel-free capture requires the running inner Gamescope compositor')
+    _, pid, env = max(candidates, key=lambda item: item[0])
+    if process_identity(pid) is None:
+        raise RuntimeError('Game capture source exited; try again')
+    return env['GAMESCOPE_WAYLAND_DISPLAY'], runtime, 'before bezel compensation'
+
+
+def capture(state, target=None):
     folder = pictures_dir()
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / (datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '.png')
-    width, height = request_capture(path)
-    print(f'Screenshot saved: {path} ({width}x{height})', flush=True)
+    display, runtime, source = capture_source(target if target is not None else gamescope_ancestor())
+    width, height = request_capture(path, display=display, runtime_dir=runtime)
+    print(f'Screenshot saved: {path} ({width}x{height}; {source}; socket={display})', flush=True)
     subprocess.Popen(['notify-send', 'MWM Screenshot', f'Saved {width}×{height}: {path.name}']) if __import__('shutil').which('notify-send') else None
 
 
@@ -197,7 +258,7 @@ def main():
 
             def work():
                 try:
-                    capture(state)
+                    capture(state, target)
                 except Exception as error:
                     print(f'Screenshot failed: {error}', flush=True)
                     if shutil.which('notify-send'):

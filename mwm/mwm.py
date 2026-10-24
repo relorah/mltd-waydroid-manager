@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
     QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
     QPlainTextEdit, QScrollArea, QStackedWidget, QTabWidget, QToolButton, QVBoxLayout,
-    QWidget, QInputDialog, QSpinBox, QSlider, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QWidget, QInputDialog, QSpinBox, QDoubleSpinBox, QSlider, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 
 from popup_language import LocalizedMessageBox
@@ -521,6 +521,30 @@ class MainWindow(QMainWindow):
         self._legacy_span_override_controls.setLayout(override_row)
         self._legacy_span_override_controls.hide()
         span_layout.addWidget(span_card)
+        bezel_card = Card("Bezel Compensation")
+        self.bezel_enabled = QCheckBox("Enable")
+        self.bezel_width = QDoubleSpinBox()
+        self.bezel_width.setRange(0, 100)
+        self.bezel_width.setDecimals(1)
+        self.bezel_width.setSingleStep(0.5)
+        self.bezel_width.setSuffix(" mm")
+        try:
+            self.bezel_enabled.setChecked((self.config_dir() / "bezel-compensation-enabled").read_text().strip() == "on")
+        except OSError:
+            self.bezel_enabled.setChecked(False)
+        try:
+            self.bezel_width.setValue(float((self.config_dir() / "bezel-width-mm").read_text()))
+        except (OSError, ValueError):
+            self.bezel_width.setValue(17.5)
+        self.bezel_width.setEnabled(self.bezel_enabled.isChecked())
+        self.bezel_enabled.toggled.connect(self.bezel_width.setEnabled)
+        bezel_card.v.addWidget(self.bezel_enabled)
+        bezel_row = QHBoxLayout()
+        bezel_row.addWidget(QLabel("Combined bezel width"))
+        bezel_row.addStretch(1)
+        bezel_row.addWidget(self.bezel_width)
+        bezel_card.v.addLayout(bezel_row)
+        span_layout.addWidget(bezel_card)
         span_layout.addStretch(1)
         self.tabs.addTab(span_page, "Span Display")
 
@@ -687,6 +711,8 @@ class MainWindow(QMainWindow):
                 return
         expected = {
             "gamescope-span-enabled": "on" if self.span_displays.isChecked() else "off",
+            "bezel-compensation-enabled": "on" if self.bezel_enabled.isChecked() else "off",
+            "bezel-width-mm": f"{self.bezel_width.value():.1f}",
             "f12-screenshot-enabled": "on" if self.f12_screenshot.isChecked() else "off",
             "rtscale-zoom-fix": "on" if self.zoom_fix.isChecked() else "off",
             "rtscale-msaa-samples": str(self.msaa_samples.currentData()),
@@ -720,6 +746,10 @@ class MainWindow(QMainWindow):
                 saved = value
             if name in ("gamescope-span-enabled", "f12-screenshot-enabled") and saved is None:
                 saved = "off"
+            if name == "bezel-compensation-enabled" and saved is None:
+                saved = "off"
+            if name == "bezel-width-mm" and saved is None:
+                saved = "17.5"
             if saved != value:
                 changed.append(name)
         for obsolete in OBSOLETE_SETTINGS:
@@ -1179,6 +1209,7 @@ class MainWindow(QMainWindow):
         return (
             self.backend.currentIndex(), self.backend.currentData(), self.selected_render_mode(), self.scale.currentData(),
             self.aspect.currentData(), int(self.custom_w.value()), int(self.custom_h.value()), self.msaa_samples.currentData(), self.span_displays.isChecked(), self.f12_screenshot.isChecked(),
+            self.bezel_enabled.isChecked(), self.bezel_width.value(),
             json.dumps(getattr(self, "_span_physical_overrides", {}), sort_keys=True, separators=(",", ":")),
             int(self.gamescope_fsr_scale.currentData()), int(self.gamescope_sharpness.value()),
             bool(self.gamescope_fsr_sharpness_enabled.isChecked()), bool(self.rtscale_fsr_enabled.isChecked()),
@@ -1258,6 +1289,8 @@ class MainWindow(QMainWindow):
         self.cas_strength.setValue(50)
         self.gamescope_fsr_sharpness_enabled.setChecked(False)
         idx = self.overlay_mode.findData("off"); self.overlay_mode.setCurrentIndex(idx if idx >= 0 else 0)
+        self.bezel_enabled.setChecked(False)
+        self.bezel_width.setValue(17.5)
         self.fake_touch.setChecked(True)
         self.zoom_fix.setChecked(True)
         self.update_backend_controls(); self.update_action_buttons()
@@ -1285,6 +1318,8 @@ class MainWindow(QMainWindow):
             "gamescope-cas-strength": str(self.cas_strength.value()),
                 "mouse-as-touch": "on" if self.fake_touch.isChecked() else "off",
                 "gamescope-span-enabled": "on" if self.span_displays.isChecked() else "off",
+            "bezel-compensation-enabled": "on" if self.bezel_enabled.isChecked() else "off",
+            "bezel-width-mm": f"{self.bezel_width.value():.1f}",
             "f12-screenshot-enabled": "on" if self.f12_screenshot.isChecked() else "off",
                 "gamescope-span-physical-overrides": json.dumps(self._span_physical_overrides, sort_keys=True, separators=(",", ":")),
                 "rtscale-zoom-fix": "on" if self.zoom_fix.isChecked() else "off",

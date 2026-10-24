@@ -7,6 +7,7 @@ CHOICES = {
  'f12-screenshot-enabled': {'on','off'},
  'rtscale-msaa-samples': {'0','2'},
  'gamescope-span-enabled': {'on','off'},
+ 'bezel-compensation-enabled': {'on','off'},
  'verify-waydroid-startup': {'on','off'},
  'display-backend': {'gamescope'}, 'gamescope-render-mode': {'fsr','rtscale'},
  'rtscale-zoom-fix': {'on','off'}, 'gamescope-fsr-enabled': {'on','off'},
@@ -21,6 +22,11 @@ def validate(values):
  for key,value in values.items():
   value=value.strip()
   if key in CHOICES and value not in CHOICES[key]: raise ValueError(f'Invalid {key}: {value}')
+  if key=='bezel-width-mm':
+   import math
+   try: number=float(value)
+   except ValueError: raise ValueError('Invalid bezel width')
+   if not math.isfinite(number) or not 0<=number<=100: raise ValueError('Bezel width must be between 0 and 100 mm')
   if key=='gamescope-span-physical-overrides':
    import json,re
    try: overrides=json.loads(value)

@@ -407,7 +407,8 @@ start_fsr_scaled() {
     return $?
   fi
   local mode="$1" iw="$2" ih="$3" ow="$4" oh="$5" fsr_scale="$6" sharp_pct="$7" fg="$8" overlay="$9"
-  local tw th sharp_opt fsr_native=20 cas_enabled=off pipeline=fsr-dual cas_status=OFF
+  local tw th sharp_opt fsr_native=20 cas_enabled=off pipeline=fsr-dual cas_status=OFF inner_filter=fsr
+  if [[ "$fsr_scale" == 100 ]]; then inner_filter=linear; pipeline=bezel-dual; fi
   if [[ "$(read_fsr_sharpness_enabled)" == on ]]; then
     fsr_native="$(read_sharpness_native)"
   fi
@@ -426,7 +427,7 @@ start_fsr_scaled() {
   outer+=(-- env SDL_VIDEODRIVER=x11 DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash -c 'export WAYLAND_DISPLAY="${GAMESCOPE_WAYLAND_DISPLAY:?Outer Gamescope Wayland socket unavailable}"; exec gamescope "$@"' mwm-inner)
   local -a inner=(
     --backend sdl --expose-wayland --keep-alive --force-windows-fullscreen
-    -w "$iw" -h "$ih" -W "$tw" -H "$th" -r 120 -S fit -F fsr
+    -w "$iw" -h "$ih" -W "$tw" -H "$th" -r 120 -S fit -F "$inner_filter"
   )
   [[ -n "$sharp_opt" ]] && inner+=("$sharp_opt" "$fsr_native")
   # Host fullscreen belongs to the outer compositor. The outer
@@ -488,9 +489,14 @@ start_gamescope() {
   printf '0.00\n' > "$REAL_FPS_FILE"
   printf '0.00\n' > "$FG_FPS_FILE"
   case "$fsr_scale" in
-    100) start_no_fsr "$mode" "$iw" "$ih" "$ow" "$oh" "$fg" "$overlay" || return $? ;;
+    100)
+      if [[ "$(cat "$CFG_DIR/bezel-compensation-enabled" 2>/dev/null)" == on && "$(cat "$CFG_DIR/gamescope-span-enabled" 2>/dev/null)" == on ]]; then
+        start_fsr_scaled "$mode" "$iw" "$ih" "$ow" "$oh" 100 "$sharp_pct" "$fg" "$overlay" || return $?
+      else
+        start_no_fsr "$mode" "$iw" "$ih" "$ow" "$oh" "$fg" "$overlay" || return $?
+      fi ;;
     150)
-      if [[ "$render_mode" == rtscale || "$(read_cas_enabled)" == on ]]; then
+      if [[ "$render_mode" == rtscale || "$(read_cas_enabled)" == on || "$(cat "$CFG_DIR/bezel-compensation-enabled" 2>/dev/null)" == on ]]; then
         start_fsr_scaled "$mode" "$iw" "$ih" "$ow" "$oh" 150 "$sharp_pct" "$fg" "$overlay" || return $?
       else
         start_fsr_150 "$mode" "$iw" "$ih" "$ow" "$oh" "$native_sharpness" "$sharp_pct" "$fg" "$overlay" || return $?
@@ -531,10 +537,16 @@ start_gamescope() {
     "$fsr_scale" "$iw" "$ih" "$ow" "$oh" "$(read_fsr_sharpness_enabled)" "$overlay"
 }
 
+start_bezel_controller() {
+  if running; then
+    python3 "$SCRIPT_DIR/bezel-control.py" "$(cat "$PID_FILE")" >>"$STATE_DIR/bezel.log" 2>&1 9>&- &
+  fi
+}
+
 case "${1:-status}" in
-  start) start_gamescope ;;
+  start) start_gamescope && start_bezel_controller ;;
   stop) stop_gamescope; echo "Gamescope: OFF" ;;
-  restart) stop_gamescope; sleep 0.5; start_gamescope ;;
+  restart) stop_gamescope; sleep 0.5; start_gamescope && start_bezel_controller ;;
   status)
     if running; then
       printf 'running pid=%s' "$(cat "$PID_FILE")"
