@@ -1,3 +1,2 @@
-"""Canonical MWM release version."""
-
-__version__ = "0.96"
+# SPDX-License-Identifier: MIT
+__version__ = "0.97"

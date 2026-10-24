@@ -17,6 +17,7 @@ from pathlib import Path
 from shutil import which
 import bc250_gpu
 from overlay_owner import hud_should_run
+from hud_position import monitor_position
 
 # The desktop may export GDK_BACKEND=x11 for other applications. The HUD
 # needs the host Wayland connection for layer-shell above fullscreen windows.
@@ -371,8 +372,17 @@ for (var i=0; i<list.length; i++) {
 
     def place_hud(self, x, y):
         if GtkLayerShell.is_layer_window(self.window):
-            GtkLayerShell.set_margin(self.window, GtkLayerShell.Edge.LEFT, max(0, x))
-            GtkLayerShell.set_margin(self.window, GtkLayerShell.Edge.TOP, max(0, y))
+            display = Gdk.Display.get_default()
+            monitors = [display.get_monitor(i) for i in range(display.get_n_monitors())] if display else []
+            if not monitors:
+                return False
+            rectangles = [(g.x, g.y, g.width, g.height) for g in (m.get_geometry() for m in monitors)]
+            index, local_x, local_y = monitor_position(rectangles, x, y, self.overlay_width, self.overlay_height)
+            monitor = monitors[index]
+            if GtkLayerShell.get_monitor(self.window) != monitor:
+                GtkLayerShell.set_monitor(self.window, monitor)
+            GtkLayerShell.set_margin(self.window, GtkLayerShell.Edge.LEFT, local_x)
+            GtkLayerShell.set_margin(self.window, GtkLayerShell.Edge.TOP, local_y)
             return True
         # GTK may fall back to a normal Wayland window. Layer-shell margins
         # then do nothing, so move only our HUD through KWin instead.
@@ -417,7 +427,7 @@ for(var i=0;i<list.length;i++) {
         elif active:
             self.target_misses = 0
             position = geometry[:4]
-            if position != self.last_geometry:
+            if position is not None:
                 x, y, w, _h = position
                 margin = 10
                 ox = x + margin if self.args.position == "top-left" else x + max(0, w - self.overlay_width - margin)

@@ -14,7 +14,7 @@ class ScaleTests(unittest.TestCase):
                 self.assertEqual(scale,percent/100)
                 config=dict(line.split('=',1) for line in fps.render_config(True,scale=scale).splitlines() if '=' in line and not line.startswith('#'))
                 for key,base in [('font_size',29),('font_size_secondary',29),('font_size_text',22),('width',285),('height',200)]:
-                    self.assertAlmostEqual(float(config[key])/scale,base * 0.9)
+                    self.assertAlmostEqual(float(config[key])/scale,base * 0.63)
                 self.assertEqual(config['no_display'],'0')
 
     def test_fit_and_single_pipeline(self):

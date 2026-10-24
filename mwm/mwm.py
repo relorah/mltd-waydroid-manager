@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 import json
-from settings_safety import commit as commit_settings, recover as recover_settings
+import math
+from settings_safety import commit as commit_settings, recover as recover_settings, validate as validate_settings
 import os
 import signal
 import stat
@@ -12,6 +13,7 @@ import time
 from pathlib import Path
 from version import __version__ as APP_VERSION
 from display_settings import dimensions, ratio_width, legacy_ratio
+from span_display_info import inventory, union_bounds, physical_scale_plan
 from ui_help import help_row, local
 from host_platform import is_ubuntu
 
@@ -19,8 +21,8 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer, QLockFile, QStandardPath
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
     QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
-    QPlainTextEdit, QStackedWidget, QTabWidget, QToolButton, QVBoxLayout,
-    QWidget, QInputDialog, QSpinBox, QSlider,
+    QPlainTextEdit, QScrollArea, QStackedWidget, QTabWidget, QToolButton, QVBoxLayout,
+    QWidget, QInputDialog, QSpinBox, QSlider, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 
 from popup_language import LocalizedMessageBox
@@ -311,8 +313,6 @@ class MainWindow(QMainWindow):
         self.aspect.setToolTip("")
         aspect_row = help_row(QLabel("Aspect Ratio"), "Aspect Ratio")
         self._field_labels.append(aspect_row)
-        dgrid.addWidget(aspect_row, 0, 0)
-        dgrid.addWidget(self.aspect, 0, 1)
 
         self.overlay_mode = QComboBox()
         self.overlay_mode.addItem("Off", "off")
@@ -330,8 +330,8 @@ class MainWindow(QMainWindow):
         self.overlay_mode.setToolTip("")
         fps_row = help_row(QLabel("FPS Counter"), "FPS Counter")
         self._field_labels.append(fps_row)
-        dgrid.addWidget(fps_row, 2, 0)
-        dgrid.addWidget(self.overlay_mode, 2, 1)
+        dgrid.addWidget(fps_row, 3, 0)
+        dgrid.addWidget(self.overlay_mode, 3, 1)
 
         self.span_displays = QCheckBox("Span Displays (Experimental)")
         if "gnome" in desktop:
@@ -344,6 +344,22 @@ class MainWindow(QMainWindow):
         self.span_displays.toggled.connect(self.update_resolution_preview)
         if "gnome" in desktop:
             self.span_displays.setChecked(False)
+        # Keep the saved boolean compatible; expose a simple display count.
+        self.span_displays.hide()
+        self.display_count = QComboBox()
+        self.display_count.addItem("Single Display", 1)
+        self.display_count.addItem("Dual Display", 2)
+        self.display_count.setCurrentIndex(1 if self.span_displays.isChecked() else 0)
+        if "gnome" in desktop:
+            self.display_count.model().item(1).setEnabled(False)
+        self.display_count.currentIndexChanged.connect(
+            lambda _index: self.span_displays.setChecked(self.display_count.currentData() == 2))
+        self.span_displays.toggled.connect(
+            lambda checked: self.display_count.setCurrentIndex(1 if checked else 0))
+        dgrid.addWidget(QLabel("Display Mode"), 2, 0)
+        dgrid.addWidget(self.display_count, 2, 1)
+        dgrid.addWidget(aspect_row, 0, 0)
+        dgrid.addWidget(self.aspect, 0, 1)
 
         self.custom_w = QSpinBox()
         self.custom_h = QSpinBox()
@@ -397,6 +413,17 @@ class MainWindow(QMainWindow):
         assist.v.addWidget(help_row(self.verify_startup, "Verify Waydroid Startup"))
 
         assist.v.addWidget(help_row(self.auto_start, "Auto Launch Mirishita"))
+        self.f12_screenshot = QCheckBox("F12 Screenshot (Experimental)")
+        try:
+            self.f12_screenshot.setChecked((self.config_dir() / "f12-screenshot-enabled").read_text().strip() == "on")
+        except OSError:
+            self.f12_screenshot.setChecked(False)
+        self.f12_screenshot.setToolTip("Save the full Gamescope canvas to Pictures/MWM with F12 while the game is focused. KDE Plasma: Apply switches capture on/off without restarting Gamescope. See SCREENSHOT_TEST.md.")
+        assist.v.addWidget(self.f12_screenshot)
+        self.screenshot_status = QLabel("F12: waiting for Gamescope")
+        self.screenshot_status.setObjectName("Muted")
+        self.screenshot_status.setWordWrap(True)
+        self.screenshot_status.hide()
         self.fake_touch = QCheckBox("Mouse as Touch")
         assist.v.addWidget(help_row(self.fake_touch, "Mouse as Touch"))
         assist.v.addWidget(help_row(self.zoom_fix, "RTScale Zoom Fix"))
@@ -420,10 +447,82 @@ class MainWindow(QMainWindow):
         boost_row.addWidget(help_row(self.ps5_boost, "PS5 Linux Boost Mode"))
         boost_row.addStretch(1)
         boost_row.addWidget(self.ps5_boost_status)
-        hv.addLayout(boost_row)
+        if ps5_available:
+            hv.addLayout(boost_row)
+        else:
+            self.ps5_boost.hide()
+            self.ps5_boost_status.hide()
         hv.addSpacing(48)
         hv.addStretch(1)
         self.tabs.addTab(home, "Home")
+
+        # ===== Gamescope Span Display =====
+        span_page = QScrollArea()
+        span_page.setWidgetResizable(True)
+        span_page.setFrameShape(QFrame.Shape.NoFrame)
+        span_content = QWidget()
+        span_page.setWidget(span_content)
+        span_layout = QVBoxLayout(span_content)
+        span_layout.setContentsMargins(2, 8, 2, 2)
+        span_layout.setSpacing(9)
+        span_card = Card("Monitors")
+        span_info = QLabel("Monitor information is read from Plasma and EDID. Configure monitor scale and placement in your OS display settings.")
+        span_info.setWordWrap(True)
+        span_info.hide()
+        span_actions = QHBoxLayout()
+        self.span_refresh = QPushButton("Refresh")
+        self.span_refresh.clicked.connect(self.refresh_span_displays)
+        span_actions.addWidget(self.span_refresh)
+        self.span_match = QPushButton("Match Display Size")
+        self.span_match.setToolTip("Adjust OS scaling and bottom-align monitors using EDID dimensions. This also affects other apps.")
+        self.span_match.clicked.connect(lambda: self.adjust_display_size("apply"))
+        self.span_restore = QPushButton("Undo")
+        self.span_restore.clicked.connect(lambda: self.adjust_display_size("restore"))
+        span_actions.addWidget(self.span_match)
+        span_actions.addWidget(self.span_restore)
+        self.span_open_settings = QPushButton("Open Plasma Display Settings")
+        self.span_open_settings.clicked.connect(self.open_span_display_settings)
+        self.span_open_settings.hide()
+        self.span_status = QLabel("Reading monitor configuration…")
+        self.span_status.setWordWrap(True)
+        span_actions.addWidget(self.span_status, 1)
+        span_card.v.addLayout(span_actions)
+        self.span_canvas = QLabel("Canvas: detecting…")
+        self.span_canvas.setObjectName("Muted")
+        span_card.v.addWidget(self.span_canvas)
+        self.span_physical_hint = QLabel("Physical size matching: detecting…")
+        self.span_physical_hint.setWordWrap(True)
+        self.span_physical_hint.hide()
+        self.span_table = QTableWidget(0, 10)
+        self.span_table.setHorizontalHeaderLabels(["Output", "EDID monitor", "Mode", "Scale", "Logical", "Position", "Refresh", "Diagonal", "Physical mm", "PPI / logical PPI"])
+        self.span_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.span_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.span_table.verticalHeader().setVisible(False)
+        self.span_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.span_table.horizontalHeader().setStretchLastSection(True)
+        self.span_table.setMinimumHeight(170)
+        span_card.v.addWidget(self.span_table)
+        override_row = QHBoxLayout()
+        self.span_override_output = QComboBox()
+        self.span_override_output.setMinimumWidth(140)
+        self.span_override_output.currentIndexChanged.connect(self.span_override_selection_changed)
+        self.span_override_width = QSpinBox(); self.span_override_width.setRange(100, 3000); self.span_override_width.setSuffix(" mm W")
+        self.span_override_height = QSpinBox(); self.span_override_height.setRange(100, 3000); self.span_override_height.setSuffix(" mm H")
+        self.span_override_width.setValue(530); self.span_override_height.setValue(300)
+        self.span_override_set = QPushButton("Save size override")
+        self.span_override_set.clicked.connect(self.set_span_physical_override)
+        self.span_override_clear = QPushButton("Use EDID / clear override")
+        self.span_override_clear.clicked.connect(self.clear_span_physical_override)
+        for widget in (QLabel("Physical size correction:"), self.span_override_output,
+                       self.span_override_width, self.span_override_height,
+                       self.span_override_set, self.span_override_clear):
+            override_row.addWidget(widget)
+        self._legacy_span_override_controls = QWidget(span_content)
+        self._legacy_span_override_controls.setLayout(override_row)
+        self._legacy_span_override_controls.hide()
+        span_layout.addWidget(span_card)
+        span_layout.addStretch(1)
+        self.tabs.addTab(span_page, "Span Display")
 
         # ===== Games =====
         games = QWidget()
@@ -462,7 +561,6 @@ class MainWindow(QMainWindow):
             b.clicked.connect(fn)
             mbuttons.addWidget(b, 1)
         mcard.v.addLayout(mbuttons)
-        mcard.v.addWidget(help_row(self.span_displays, "Span Displays (Experimental)"))
         mv.addWidget(mcard)
 
         debug_card = Card("RTScale Debug")
@@ -549,13 +647,27 @@ class MainWindow(QMainWindow):
         self._initial_loading = False
         QTimer.singleShot(0, self.fit_initial_size)
 
+        self._span_inventory = []
+        self._span_physical_overrides = self.load_span_physical_overrides()
+        self._span_probe = QProcess(self)
+        self._span_probe.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self._span_probe.finished.connect(self.span_inventory_received)
+        self._span_probe.errorOccurred.connect(self.span_probe_error)
+        self._span_adjust = QProcess(self)
+        self._span_adjust.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self._span_adjust.finished.connect(self.display_size_adjusted)
+        self._span_adjust.errorOccurred.connect(self.display_size_adjust_error)
         self._runtime_running = False
         self._runtime_probe = QProcess(self)
         self._runtime_probe.finished.connect(self.runtime_status_received)
         self._runtime_probe_timer = QTimer(self)
         self._runtime_probe_timer.timeout.connect(self.poll_runtime_status)
         self._runtime_probe_timer.start(2000)
+        self._screenshot_status_timer = QTimer(self)
+        self._screenshot_status_timer.timeout.connect(self.update_screenshot_status)
+        self._screenshot_status_timer.start(500)
         QTimer.singleShot(0, self.poll_runtime_status)
+        QTimer.singleShot(0, self.refresh_span_displays)
 
         self.saved_snapshot = self.current_settings_snapshot()
         self._dirty_timer = QTimer(self)
@@ -575,6 +687,7 @@ class MainWindow(QMainWindow):
                 return
         expected = {
             "gamescope-span-enabled": "on" if self.span_displays.isChecked() else "off",
+            "f12-screenshot-enabled": "on" if self.f12_screenshot.isChecked() else "off",
             "rtscale-zoom-fix": "on" if self.zoom_fix.isChecked() else "off",
             "rtscale-msaa-samples": str(self.msaa_samples.currentData()),
             "custom-aspect": f"{self.custom_w.value()}:{self.custom_h.value()}",
@@ -605,7 +718,7 @@ class MainWindow(QMainWindow):
                 saved = "0"
             if name == "custom-aspect" and saved is None:
                 saved = value
-            if name == "gamescope-span-enabled" and saved is None:
+            if name in ("gamescope-span-enabled", "f12-screenshot-enabled") and saved is None:
                 saved = "off"
             if saved != value:
                 changed.append(name)
@@ -621,6 +734,158 @@ class MainWindow(QMainWindow):
 
     def backend_state_path(self):
         return self.config_dir() / "display-backend"
+
+    def load_span_physical_overrides(self):
+        path = self.config_dir() / "gamescope-span-physical-overrides"
+        try:
+            raw = path.read_text(encoding="utf-8").strip() or "{}"
+            validate_settings({"gamescope-span-physical-overrides": raw})
+            value = json.loads(raw)
+            return value if isinstance(value, dict) else {}
+        except (OSError, UnicodeError, ValueError, TypeError):
+            return {}
+
+    def span_override_selection_changed(self, *_args):
+        name = self.span_override_output.currentData()
+        size = self._span_physical_overrides.get(name) if name else None
+        if size is None:
+            output = next((o for o in self._span_inventory if o.get("name") == name), None)
+            size = output.get("physical_mm") if output else None
+        if size and len(size) == 2:
+            self.span_override_width.setValue(int(size[0]))
+            self.span_override_height.setValue(int(size[1]))
+
+    def set_span_physical_override(self):
+        name = self.span_override_output.currentData()
+        if not name:
+            self.span_status.setText("Refresh monitor info before editing a physical size.")
+            return
+        self._span_physical_overrides[name] = [self.span_override_width.value(), self.span_override_height.value()]
+        self.refresh_span_displays()
+        self.update_action_buttons()
+
+    def clear_span_physical_override(self):
+        name = self.span_override_output.currentData()
+        if name and name in self._span_physical_overrides:
+            del self._span_physical_overrides[name]
+            self.refresh_span_displays()
+            self.update_action_buttons()
+
+    def adjust_display_size(self, action):
+        if self._span_adjust.state() != QProcess.ProcessState.NotRunning:
+            return
+        self.span_match.setEnabled(False)
+        self.span_restore.setEnabled(False)
+        self.span_status.setText("Matching display sizes…" if action == "apply" else "Restoring display layout…")
+        self._span_adjust.start(sys.executable, [str(SCRIPTS / "match-display-size.py"), action])
+
+    def display_size_adjusted(self, exit_code, _status):
+        result = bytes(self._span_adjust.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        self.span_match.setEnabled(True)
+        self.span_restore.setEnabled(True)
+        self.log(result or "Display size adjustment finished")
+        if exit_code:
+            self.span_status.setText(result or "Display adjustment failed")
+        else:
+            self.refresh_span_displays()
+
+    def display_size_adjust_error(self, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            self.span_match.setEnabled(True)
+            self.span_restore.setEnabled(True)
+            self.span_status.setText("Could not start display size adjustment")
+
+    def open_span_display_settings(self):
+        result = QProcess.startDetached("systemsettings", ["kcm_kscreen"])
+        ok = result[0] if isinstance(result, tuple) else result
+        if not ok:
+            self.span_status.setText("Could not open System Settings. Launch Display & Monitor settings manually.")
+
+    def span_probe_error(self, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            self.span_refresh.setEnabled(True)
+            self.span_status.setText("kscreen-doctor is unavailable; install/use a KDE Plasma session to read the output layout.")
+            self.span_canvas.setText("Canvas: unavailable")
+
+    def refresh_span_displays(self):
+        if self._span_probe.state() != QProcess.ProcessState.NotRunning:
+            return
+        self.span_status.setText("Reading KScreen outputs…")
+        self.span_refresh.setEnabled(False)
+        self._span_probe.start("kscreen-doctor", ["-j"])
+
+    def span_inventory_received(self, exit_code, _exit_status):
+        self.span_refresh.setEnabled(True)
+        payload = bytes(self._span_probe.readAllStandardOutput()).decode("utf-8", errors="replace")
+        if exit_code != 0:
+            self.span_status.setText("KScreen unavailable. Use Plasma Display Settings; monitor details could not be read.")
+            self.span_canvas.setText("Canvas: unavailable")
+            self.span_table.setRowCount(0)
+            return
+        try:
+            outputs = inventory(payload)
+            for output in outputs:
+                name = output.get("name")
+                if name in self._span_physical_overrides:
+                    output["physical_mm"] = tuple(self._span_physical_overrides[name])
+            self._span_inventory = outputs
+            self.span_override_output.blockSignals(True)
+            self.span_override_output.clear()
+            for output in outputs:
+                name = output.get("name")
+                if name:
+                    self.span_override_output.addItem(str(name), str(name))
+            self.span_override_output.blockSignals(False)
+            self.span_override_selection_changed()
+        except (ValueError, TypeError, KeyError) as error:
+            self.span_status.setText(f"Could not parse monitor information: {error}")
+            self.span_canvas.setText("Canvas: unavailable")
+            self.span_table.setRowCount(0)
+            return
+        try:
+            plan = physical_scale_plan(outputs)
+            recommended = " / ".join(f"{o['name']}: {o['scale'] * 100:g}%" for o in plan)
+            self.span_physical_hint.setText("Approximate equal physical size: " + recommended +
+                ". Based on monitor dimensions; apply in Plasma Display Settings. Center-align the screens vertically. FSR off is recommended while checking motion.")
+        except (ValueError, TypeError, KeyError, OverflowError) as error:
+            self.span_physical_hint.setText("Physical size matching unavailable: " + str(error))
+        active = [o for o in outputs if o.get("connected") and o.get("enabled")]
+        self.span_table.setRowCount(len(outputs))
+        for row, output in enumerate(outputs):
+            name = str(output.get("name") or output.get("id") or "Unknown")
+            connected = bool(output.get("connected")); enabled = bool(output.get("enabled"))
+            size = output.get("size") or {}
+            mode = f"{size.get('width', '?')}×{size.get('height', '?')}"
+            rect = output.get("logical_rect")
+            scale = float(output.get("scale", 1) or 1)
+            logical = f"{rect[2]}×{rect[3]}" if rect else "—"
+            position = f"({rect[0]}, {rect[1]})" if rect else "—"
+            hz = output.get("refresh_hz")
+            refresh = f"{float(hz):.2f} Hz" if isinstance(hz, (int, float)) else "—"
+            physical = output.get("physical_mm")
+            manual_size = name in self._span_physical_overrides
+            ppi = "—"; diagonal = "—"
+            if physical:
+                diagonal_in = math.hypot(*physical) / 25.4
+                diagonal = f"{diagonal_in:.1f} in"
+                if float(size.get("width", 0)) > 0 and float(size.get("height", 0)) > 0:
+                    raw_ppi = math.hypot(float(size["width"]), float(size["height"])) / diagonal_in
+                    ppi = f"{raw_ppi:.1f} / {raw_ppi / scale:.1f}"
+            edid = output.get("edid_info") or {}
+            model = str(edid.get("model") or "Unknown / EDID unavailable")
+            cells = [name, model, mode,
+                     f"{scale:g}×", logical, position, refresh, diagonal,
+                     f"{physical[0]}×{physical[1]}" + (" *" if manual_size else "") if physical else "Unavailable", ppi]
+            for col, value in enumerate(cells):
+                self.span_table.setItem(row, col, QTableWidgetItem(value))
+        self.span_table.resizeRowsToContents()
+        try:
+            bounds = union_bounds(outputs)
+            self.span_canvas.setText(f"Desktop canvas: {bounds['width']}×{bounds['height']}")
+            self.span_status.setText(f"{len(active)} active displays")
+        except (ValueError, TypeError, KeyError) as error:
+            self.span_canvas.setText("Canvas: unavailable")
+            self.span_status.setText(str(error))
 
     def load_backend(self):
         try:
@@ -753,9 +1018,8 @@ class MainWindow(QMainWindow):
 
     def fit_initial_size(self):
         self.layout().activate()
-        width = self.minimumSizeHint().width()
-        self.setMinimumWidth(width)
-        self.resize(width, max(700, self.minimumSizeHint().height()))
+        self.setMinimumWidth(520)
+        self.resize(520, max(700, self.minimumSizeHint().height()))
 
     def update_msaa_controls(self, *_args):
         if not hasattr(self, "zoom_fix"):
@@ -914,7 +1178,8 @@ class MainWindow(QMainWindow):
     def current_settings_snapshot(self):
         return (
             self.backend.currentIndex(), self.backend.currentData(), self.selected_render_mode(), self.scale.currentData(),
-            self.aspect.currentData(), int(self.custom_w.value()), int(self.custom_h.value()), self.msaa_samples.currentData(), self.span_displays.isChecked(),
+            self.aspect.currentData(), int(self.custom_w.value()), int(self.custom_h.value()), self.msaa_samples.currentData(), self.span_displays.isChecked(), self.f12_screenshot.isChecked(),
+            json.dumps(getattr(self, "_span_physical_overrides", {}), sort_keys=True, separators=(",", ":")),
             int(self.gamescope_fsr_scale.currentData()), int(self.gamescope_sharpness.value()),
             bool(self.gamescope_fsr_sharpness_enabled.isChecked()), bool(self.rtscale_fsr_enabled.isChecked()),
             self.overlay_mode.currentData(), bool(self.fake_touch.isChecked()), bool(self.zoom_fix.isChecked()), bool(self.auto_start.isChecked()), bool(self.verify_startup.isChecked()), bool(self.cas_enabled.isChecked()), int(self.cas_strength.value()),
@@ -974,6 +1239,9 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.span_displays.setChecked(False)
+        self.f12_screenshot.setChecked(False)
+        self._span_physical_overrides = {}
+        self.refresh_span_displays()
         self._reset_requested = True
         self.verify_startup.setChecked(True)
         self.auto_start.setChecked(True)
@@ -1017,6 +1285,8 @@ class MainWindow(QMainWindow):
             "gamescope-cas-strength": str(self.cas_strength.value()),
                 "mouse-as-touch": "on" if self.fake_touch.isChecked() else "off",
                 "gamescope-span-enabled": "on" if self.span_displays.isChecked() else "off",
+            "f12-screenshot-enabled": "on" if self.f12_screenshot.isChecked() else "off",
+                "gamescope-span-physical-overrides": json.dumps(self._span_physical_overrides, sort_keys=True, separators=(",", ":")),
                 "rtscale-zoom-fix": "on" if self.zoom_fix.isChecked() else "off",
                 "rtscale-msaa-samples": str(self.msaa_samples.currentData()),
                 "custom-aspect": f"{self.custom_w.value()}:{self.custom_h.value()}",
@@ -1037,7 +1307,7 @@ class MainWindow(QMainWindow):
         self._needs_backend_migration = False
         self.update_action_buttons()
         label = "KDE / KWin + RTScale" if self.backend.currentData() == "kwin" else ("Gamescope + RTScale" if self.selected_render_mode() == "rtscale" else "Gamescope + FSR1")
-        self.log(f"Applied settings saved for {label}. Rendering settings take effect after Waydroid Refresh; FPS Counter applies now.")
+        self.log(f"Applied settings saved for {label}. Rendering settings take effect after Waydroid Refresh; FPS Counter and F12 Screenshot apply now.")
         if not self.start_performance_overlay():
             QMessageBox.warning(self, "FPS Counter", "Settings were saved, but the FPS counter could not be updated. Check the log.")
         try:
@@ -1045,6 +1315,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         return True
+
+    def update_screenshot_status(self):
+        try:
+            state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "mwm"
+            info = json.loads((state / "screenshot-status.json").read_text(encoding="utf-8"))
+            if not Path(f"/proc/{int(info['pid'])}").exists():
+                raise ValueError("Listener has exited")
+            self.screenshot_status.setText(str(info["message"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            self.screenshot_status.setText("F12: listener not running; start/refresh Gamescope once")
 
     def apply_settings(self):
         """Commit settings; Refresh remains an explicit separate action."""

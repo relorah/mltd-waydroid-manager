@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 """Validate a Gamescope canvas from enabled KScreen outputs; no monitor writes."""
-import importlib.util,json,math,os,subprocess,sys,time
+import importlib.util,json,os,subprocess,sys,time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from span_display_info import union_bounds
 CFG=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'mwm'
 STATE=Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'mwm'
 def enabled():
@@ -11,19 +13,8 @@ def enabled():
  if value not in ('on','off'):raise ValueError('Invalid Gamescope span setting')
  return value=='on'
 def geometry(outputs):
- rects=[]
- for o in outputs:
-  if not o.get('enabled') or not o.get('connected'):continue
-  scale=float(o['scale']);size=o['size'];pos=o['pos']
-  if not math.isfinite(scale) or scale<=0:raise ValueError('Invalid output scale')
-  w=round(size['width']/scale);h=round(size['height']/scale)
-  if min(w,h)<=0:raise ValueError('Invalid output dimensions')
-  rects.append((int(pos['x']),int(pos['y']),w,h))
- if len(rects)<2:raise ValueError('Span Displays requires two enabled connected outputs')
- x=min(r[0] for r in rects);y=min(r[1] for r in rects)
- w=max(r[0]+r[2] for r in rects)-x;h=max(r[1]+r[3] for r in rects)-y
- if not 320<=w<=16384 or not 320<=h<=8192:raise ValueError('Unsupported display canvas')
- return dict(x=x,y=y,width=w,height=h)
+ return union_bounds(outputs)
+
 def discover():
  result=subprocess.run(['kscreen-doctor','-j'],capture_output=True,text=True,timeout=4,check=True)
  return geometry(json.loads(result.stdout)['outputs'])

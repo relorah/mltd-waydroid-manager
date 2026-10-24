@@ -4,6 +4,7 @@ from pathlib import Path
 from contextlib import contextmanager
 
 CHOICES = {
+ 'f12-screenshot-enabled': {'on','off'},
  'rtscale-msaa-samples': {'0','2'},
  'gamescope-span-enabled': {'on','off'},
  'verify-waydroid-startup': {'on','off'},
@@ -20,6 +21,14 @@ def validate(values):
  for key,value in values.items():
   value=value.strip()
   if key in CHOICES and value not in CHOICES[key]: raise ValueError(f'Invalid {key}: {value}')
+  if key=='gamescope-span-physical-overrides':
+   import json,re
+   try: overrides=json.loads(value)
+   except (TypeError,ValueError): raise ValueError('Invalid physical size overrides')
+   if not isinstance(overrides,dict): raise ValueError('Invalid physical size overrides')
+   for name,size in overrides.items():
+    if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9._-]+',name): raise ValueError('Invalid monitor name in physical size overrides')
+    if not isinstance(size,list) or len(size)!=2 or any(type(v) is not int or not 100<=v<=3000 for v in size): raise ValueError('Physical size overrides must be millimetres between 100 and 3000')
   if key=='custom-aspect':
    import re
    m=re.fullmatch(r'(\d{1,2}):(\d{1,2})',value)

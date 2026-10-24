@@ -50,9 +50,9 @@ def render_config(visible, scale=None):
     command = shlex.join(["/bin/bash", str(Path(__file__).resolve().with_name("mangoapp-fps-text.sh"))])
     text = text.replace("@MWM_GAME_FPS@", command)
     # Keep the compensated HUD slightly smaller on the final display.
-    scale = (ui_scale() if scale is None else scale) * 0.9
+    scale = (ui_scale() if scale is None else scale) * 0.63
     for key in ("font_size", "font_size_secondary", "font_size_text", "width", "height"):
-        text = "\n".join(f"{key}={float(line.split("=", 1)[1]) * scale:g}" if line.startswith(key + "=") else line
+        text = "\n".join(f"{key}={float(line.split("=", 1)[1]) * scale:.12g}" if line.startswith(key + "=") else line
                          for line in text.splitlines())
     lines = [line for line in text.splitlines() if not line.strip().startswith("no_display")]
     return "\n".join(lines) + f"\nno_display={0 if visible else 1}\n"

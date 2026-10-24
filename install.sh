@@ -317,6 +317,9 @@ install_mwm_launcher() {
   rsync -a --delete --checksum --exclude=/.runtime/ --exclude=/logs/ --exclude=/.git/ --exclude=/.codex/ --exclude=/.agents/ --exclude=/.aws/ "$SCRIPT_DIR/mwm/" "$APP_HOME/"
   chmod +x "$APP_HOME/mwm.py" "$APP_HOME/fps_overlay.py" "$APP_HOME/scripts/"*.sh "$APP_HOME/scripts/"*.py
   chmod +x "$APP_HOME/scripts/mangoapp-bin/mangoapp"
+  if [[ -f "$APP_HOME/scripts/mangoapp-native/mangoapp" ]]; then
+    chmod +x "$APP_HOME/scripts/mangoapp-native/mangoapp"
+  fi
 
   cat > "$LOCAL_BIN/mwm" <<EOF2
 #!/usr/bin/env bash
@@ -324,6 +327,27 @@ export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PAT
 exec python "$APP_HOME/mwm.py" "\$@"
 EOF2
   chmod +x "$LOCAL_BIN/mwm"
+
+
+  cat > "$LOCAL_BIN/mwm-mirishita" <<EOF2
+#!/usr/bin/env bash
+export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PATH"
+exec bash "$APP_HOME/scripts/launch-mirishita.sh" "\$@"
+EOF2
+  chmod +x "$LOCAL_BIN/mwm-mirishita"
+  cat > "$DESKTOP_DIR/mwm-mirishita.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Mirishita (MWM)
+Name[ja]=ミリシタ（MWM）
+Comment=Launch Mirishita through MWM and Gamescope
+Exec=$LOCAL_BIN/mwm-mirishita
+Icon=applications-games
+Terminal=false
+Categories=Game;
+StartupNotify=false
+StartupWMClass=gamescope
+EOF2
 
   cat > "$DESKTOP_DIR/mwm.desktop" <<EOF2
 [Desktop Entry]

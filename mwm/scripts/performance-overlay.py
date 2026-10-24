@@ -86,10 +86,21 @@ def reconcile(action='sync',if_running=False):
         if mode=='mangoapp':
             if mangoapp_program(ROOT) is None:
                 raise RuntimeError('MangoApp is unavailable; rerun install.sh --update-app or select Off')
-            # MangoApp must be attached when Gamescope starts. Never silently
-            # replace the selected renderer with the old Minimal HUD.
-            print('FPS Counter: MangoApp saved; Restart is required to start MangoApp')
-            return
+            # Attach to the existing nested X11 display without restarting
+            # the game or silently replacing the selected renderer.
+            if not running():
+                print('FPS Counter: MangoApp saved; display session is stopped')
+                return
+            with (STATE/'mangoapp-live.log').open('a') as log:
+                proc=subprocess.Popen([sys.executable,str(ROOT/'scripts/mangoapp-live.py')],
+                    stdout=log,stderr=log,stdin=subprocess.DEVNULL,start_new_session=True)
+            for _ in range(20):
+                if mango_running():
+                    print('FPS Counter: MangoApp / attached to running game')
+                    return
+                if proc.poll() is not None:break
+                time.sleep(.1)
+            raise RuntimeError('MangoApp failed to attach; see mangoapp-live.log')
         current=instances()
         if if_running and mode!='off' and not current and not running():
             print('FPS Counter: saved; display session is stopped')

@@ -55,12 +55,9 @@ elif [[ -x "$script_dir/mangoapp-native/mangoapp" ]]; then
 fi
 env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 SDL_VIDEODRIVER=x11 "$mango_executable" "$@" &
 mango_pid=$!
-if wait "$mango_pid"; then
-  exit 0
-else
-  rc=$?
-  printf '%s MangoApp failed rc=%s\n' "$(date --iso-8601=ns)" "$rc" >> "$state/mangoapp-failed"
-  # Avoid a tight Gamescope reaper loop if the optional overlay cannot start.
-  sleep 1
-  exit "$rc"
-fi
+# GLFW can report display initialization failure yet return success. Any
+# unsolicited exit needs the latch, including status 0, to stop reaper churn.
+if wait "$mango_pid"; then rc=0; else rc=$?; fi
+printf '%s MangoApp exited rc=%s; parked until next Gamescope start\n' "$(date --iso-8601=ns)" "$rc" >> "$state/mangoapp-failed"
+sleep 1
+exit "$rc"

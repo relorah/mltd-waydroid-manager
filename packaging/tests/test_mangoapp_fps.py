@@ -40,7 +40,7 @@ class MangoAppFPS(unittest.TestCase):
             self.assertEqual(settings["fps"], "0")
             self.assertEqual(settings["legacy_layout"], "0")
             self.assertEqual(settings["font_size_secondary"], settings["font_size"])
-            self.assertEqual((settings["width"], settings["height"], settings["font_size"]), ("256.5", "180", "26.1"))
+            self.assertEqual((settings["width"], settings["height"], settings["font_size"]), ("179.55", "126", "18.27"))
             self.assertEqual(lines[lines.index("custom_text=FPS") + 1].split("=", 1)[0], "exec")
             self.assertIn("frame_timing", lines)
             self.assertLess(lines.index("gpu_stats"), lines.index("cpu_stats"))

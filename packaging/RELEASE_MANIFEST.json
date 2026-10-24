@@ -1,7 +1,7 @@
 {
-  "version": "0.96",
+  "version": "0.97",
   "candidate": "release",
-  "source_commit": "a633a078059c8726c58ea945f9a88ad18592ea92",
+  "source_commit": "ccd442d1ee7f486f8068b0447e6bfdf8f5cf73f2",
   "graphics_base_sha256": "6ddc1e4dbf0c5663d2ed70df3c6eed406211cffad6c0f406f53c2e87b236d9dd",
   "payload_sha256_file": "packaging/payload/SHA256SUMS"
 }

@@ -73,6 +73,8 @@ summary_view() {
   mode="$(cat "$CFG_DIR/aspect-ratio" 2>/dev/null || echo auto)"
   if [[ "$b" == kwin ]]; then
     printf 'Backend: KDE / KWin + RTScale (High Quality)\n'
+  elif [[ "$render" == rtscale ]]; then
+    printf 'Backend: Gamescope + RTScale\n'
   else
     printf 'Backend: Gamescope + FSR1 (Balanced)\n'
   fi

@@ -1,4 +1,4 @@
-"""All HUD modes attach MangoApp so renderer switching needs no restart."""
+"""MangoApp uses the managed live attach path instead of Gamescope respawns."""
 import os
 from pathlib import Path
 import subprocess
@@ -21,6 +21,5 @@ setsid() { printf '%s\n' "$@" > "$CALLS"; }
                     env = dict(os.environ,MODE=mode,STATE_DIR=directory,SCRIPT_DIR=directory,LOG_FILE=directory+'/log',RUN_EXIT_FILE=directory+'/exit',CALLS=directory+'/calls')
                     subprocess.run(['bash','-c',script],env=env,check=True,capture_output=True)
                     args = Path(directory+'/calls').read_text().splitlines()
-                    self.assertEqual(args.count('--mangoapp'),1)
-                    if dual:self.assertEqual(args[args.index('mwm-inner')+1],'--mangoapp')
-                    self.assertTrue(Path(directory+'/mangoapp-active').exists())
+                    self.assertEqual(args.count('--mangoapp'),0)
+                    self.assertEqual(Path(directory+'/mangoapp-active').exists(), mode=='mangoapp')

@@ -99,7 +99,7 @@ gamescope_span_enabled() {
 }
 
 host_screen_size() {
-  if gamescope_span_enabled; then
+  if [[ "${1:-}" != primary ]] && gamescope_span_enabled; then
     python "$(dirname "$0")/gamescope_span.py" size
     return $?
   fi
@@ -152,6 +152,7 @@ read_fsr_scale() {
   else
     enabled=off
   fi
+  enabled="${MWM_FSR_ENABLED_OVERRIDE:-$enabled}"
   [[ "$enabled" == on ]] || { printf '100\n'; return; }
   [[ -f "$FSR_SCALE_FILE" ]] && v="$(tr -d '[:space:]' < "$FSR_SCALE_FILE" 2>/dev/null || true)"
   case "$v" in 125|150|175|200) ;; *) v=125 ;; esac
@@ -161,6 +162,7 @@ read_fsr_scale() {
 read_sharpness_native() {
   local v="10"
   [[ -f "$SHARPNESS_FILE" ]] && v="$(tr -d '[:space:]' < "$SHARPNESS_FILE" 2>/dev/null || true)"
+  v="${MWM_FSR_SHARPNESS_OVERRIDE:-$v}"
   [[ "$v" =~ ^([0-9]|1[0-9]|20)$ ]] || v=10
   printf '%s\n' "$v"
 }
@@ -194,7 +196,7 @@ gamescope_sharpness_option() {
 read_window_mode() {
   # Restore the known-working 0.5.72 Wayland presentation path. Window/fullscreen
   # switching is handled by Super+F after startup, without changing backend.
-  if gamescope_span_enabled; then echo windowed; else echo fullscreen; fi
+  echo fullscreen
 }
 
 read_fg_mode() {
@@ -267,18 +269,31 @@ write_session() {
 launch_outer() {
   local fg="$1" overlay="$2"; shift 2
   local -a command=("$@")
+  if [[ "${MWM_GAMESCOPE_STATS_PATH:-}" == /* ]]; then
+    [[ -e "$MWM_GAMESCOPE_STATS_PATH" ]] || : > "$MWM_GAMESCOPE_STATS_PATH"
+    command=("${command[0]}" --stats-path "$MWM_GAMESCOPE_STATS_PATH" "${command[@]:1}")
+  fi
+  # Wrap only the outer child: its socket belongs to the final canvas.
+  local screenshot_index
+  for screenshot_index in "${!command[@]}"; do
+    if [[ "${command[$screenshot_index]}" == -- ]]; then
+      screenshot_index=$((screenshot_index + 1))
+      command=("${command[@]:0:screenshot_index}" bash "$SCRIPT_DIR/screenshot-child.sh" "${command[@]:screenshot_index}")
+      break
+    fi
+  done
   # Keep MAKO scoped to the outer Gamescope process and clear inherited profile
   # overrides so nested children cannot accidentally enable it.
   local -a env_args=(-u MANGOHUD -u MANGOHUD_CONFIG -u MANGOAPP_MSG_TYPE -u MAKO_ENV -u MAKO_PROFILE -u DISABLE_MAKO
     "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0" "SDL_VIDEODRIVER=wayland" "SDL_VIDEO_WAYLAND_WMCLASS=mwm-gamescope" "SDL_APP_ID=mwm-gamescope")
 
-  if gamescope_span_enabled; then
-    env_args+=("SDL_VIDEODRIVER=x11" "SDL_VIDEO_X11_WMCLASS=mwm-gamescope")
-  fi
+  # Span uses the same native Wayland startup as a single display, then the
+  # KWin fitter expands the borderless window after the compositor is ready.
   rm -f "$STATE_DIR/mangoapp-active" "$STATE_DIR/mangoapp-failed"
   local mango=off real_candidate
-  # Keep MangoApp attached but hidden for MWM HUD modes, so live switching works.
-  if [[ "$overlay" == mangoapp || "$overlay" == off || "$overlay" == minimal || "$overlay" == detailed ]]; then
+  # MWM HUD modes do not need a second overlay process. Hidden MangoApp
+  # can repeatedly fail in the host X11 initialization path.
+  if [[ "$overlay" == mangoapp || "${MWM_KEEP_HIDDEN_MANGOAPP:-off}" == on ]]; then
     real_candidate="$(command -v mangoapp 2>/dev/null || true)"
     if [[ -f "$SCRIPT_DIR/mangoapp-runtime.py" ]]; then
       real_candidate="$(python3 "$SCRIPT_DIR/mangoapp-runtime.py" mangoapp 2>/dev/null || true)"
@@ -294,21 +309,13 @@ launch_outer() {
     local real_mango
     real_mango="$real_candidate"
     grep -q -- '--mangoapp' <<< "$(gamescope --help 2>&1)" || { echo "Gamescope lacks --mangoapp support" >&2; return 2; }
-    # In a dual pipeline instrument the inner compositor that receives Waydroid frames.
-    local index inner_index=-1
-    for index in "${!command[@]}"; do
-      [[ "${command[$index]}" != mwm-inner ]] || inner_index=$index
-    done
-    if (( inner_index >= 0 )); then
-      index=$((inner_index + 1))
-      command=("${command[@]:0:index}" --mangoapp "${command[@]:index}")
-    else
-      command=("${command[0]}" --mangoapp "${command[@]:1}")
-    fi
+    # Attach after the MWM client display exists via performance-overlay.py.
+    # The host Gamescope can bypass our PATH wrapper for --mangoapp, losing
+    # the FPS collector and the bundled integer-alignment implementation.
     env_args+=("MWM_REAL_MANGOAPP=$real_mango" "PATH=$SCRIPT_DIR/mangoapp-bin:$PATH"
       "MANGOHUD_CONFIG=position=top-left,fps,frametime=0,frame_timing,cpu_stats,gpu_stats,cpu_temp,gpu_temp,font_size=29,height=200,width=285,background_alpha=0.6")
     printf "on\n" > "$STATE_DIR/mangoapp-active"
-    echo "MangoApp: ON / nearest Waydroid compositor / X11 overlay / MWM HUD paused" >> "$LOG_FILE"
+    echo "MangoApp: deferred attach / nearest Waydroid compositor / X11 overlay" >> "$LOG_FILE"
   fi
   setsid "$SCRIPT_DIR/gamescope-supervisor.sh" "$RUN_EXIT_FILE" env "${env_args[@]}" DISABLE_MAKO=1 "${command[@]}" >>"$LOG_FILE" 2>&1 </dev/null 9>&- 8>&- 7>&- &
 }
@@ -375,7 +382,30 @@ start_fsr_150() {
   launch_outer "$fg" "$overlay" "${args[@]}"
 }
 
+# Diagnostic route: apply FSR once at the final canvas. Fixed intermediate
+# percentage is deliberately bypassed only under this explicit override.
+start_fsr_direct_diagnostic() {
+  local mode="$1" iw="$2" ih="$3" ow="$4" oh="$5" selected="$6" sharp_pct="$7" fg="$8" overlay="$9"
+  local sharp_opt native
+  sharp_opt="$(gamescope_sharpness_option 2>/dev/null || true)"
+  native="$(read_sharpness_native)"
+  local -a args=(gamescope --backend "$(outer_backend "$fg")" --expose-wayland --keep-alive --force-windows-fullscreen
+    -w "$iw" -h "$ih" -W "$ow" -H "$oh" -r 120 -S fit -F fsr)
+  [[ -z "$sharp_opt" ]] || args+=("$sharp_opt" "$native")
+  if [[ "$(read_window_mode)" == fullscreen ]]; then args+=(-f); else args+=(-b); fi
+  args+=(-- env DISABLE_MAKO=1 DISABLE_GAMESCOPE_WSI=1 ENABLE_GAMESCOPE_WSI=0 bash "$SCRIPT_DIR/gamescope-client.sh")
+  write_session "$mode" "$iw" "$ih" "$ow" "$oh" "$selected" "$sharp_pct" "$ow" "$oh" fsr-direct-diagnostic "$fg" "$overlay"
+  : > "$LOG_FILE"
+  { printf 'Experimental FSR directly to final canvas; selected intermediate percentage %s is bypassed.\n' "$selected"
+    printf '  COMMAND:'; printf ' %q' "${args[@]}"; printf '\n'; } >> "$LOG_FILE"
+  launch_outer "$fg" "$overlay" "${args[@]}"
+}
+
 start_fsr_scaled() {
+  if [[ "${MWM_FSR_PIPELINE:-}" == direct ]]; then
+    start_fsr_direct_diagnostic "$@"
+    return $?
+  fi
   local mode="$1" iw="$2" ih="$3" ow="$4" oh="$5" fsr_scale="$6" sharp_pct="$7" fg="$8" overlay="$9"
   local tw th sharp_opt fsr_native=20 cas_enabled=off pipeline=fsr-dual cas_status=OFF
   if [[ "$(read_fsr_sharpness_enabled)" == on ]]; then
@@ -442,7 +472,7 @@ start_gamescope() {
   [[ -z "${MWM_ASPECT_MODE_OVERRIDE:-}" ]] || mode="$MWM_ASPECT_MODE_OVERRIDE"
   [[ -n "$mode" ]] || mode=auto
   read -r iw ih < <(mode_to_internal "$mode")
-  read -r ow oh < <(host_screen_size)
+  read -r ow oh < <(host_screen_size primary)
   render_mode="$(read_render_mode)"
   fsr_scale="$(read_fsr_scale)"
   if [[ "$render_mode" == rtscale ]]; then

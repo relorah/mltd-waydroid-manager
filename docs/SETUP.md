@@ -1,4 +1,4 @@
-# MLTD Waydroid Manager (MWM) 0.96 Setup Guide
+# MLTD Waydroid Manager (MWM) 0.97 Setup Guide
 
 MWMは、Waydroid上のミリシタの描画・表示・入力設定を管理するツールです。
 
@@ -63,6 +63,8 @@ Reset to Defaultsは画面上の設定を初期値へ戻します。Applyで保�
 | Upscale | 125%／150%／175%／200%。 |
 | Sharpness | 1～21。1が最小強度、21が最大です。 |
 | Aspect Ratio | Auto／32:9／21:9／16:9／4:3／3:2／Custom。Customは横・縦の比率を入力します。初期値は16:9です。 |
+| Display Mode | Single Display／Dual Display。Dual DisplayはKDE Plasmaで、窓を接続モニタ全体へ拡大します。 |
+| FPS Counter | Off／Minimal／Detailed／MangoApp。ゲーム窓の左上へ表示します。 |
 
 比率に応じた表示寸法を `Resolution: 1920x1080` の形式で表示します。Customの入力欄は解像度ではなく横：縦の比率です。極端に横長・縦長の比率は指定できません。指定可能な範囲を超えた場合は、表示される案内に従って比率を調整してください。
 
@@ -70,12 +72,17 @@ RTScale ONではWaydroid表示を高さ1080相当とし、RTScaleの基準寸法
 
 Super（Windows）＋Fで全画面とウィンドウを切り替えます。複数モニターでは、Waydroid起動時にカーソルがある画面へ表示されます。使用したい画面へカーソルを移してStart／Restartを押し、表示されるまでその画面に置いてください。
 
+Span Displayタブは、EDIDのモニタ名・寸法と、OSの解像度・倍率・配置を表示します。Match Display SizeはEDIDの寸法からOS倍率を調整し、モニタを下揃えにします。他のアプリの大きさも変わります。Undoで調整前の倍率・配置へ戻せます。寸法が取得できない、縦置き、上下配置のモニタはOS側で調整してください。実物の設置位置やベゼル幅は自動取得できません。
+
+Dual Displayは単画面向けの起動経路を使ってから枠なしの窓を広げます。FSRオンの2画面表示はこの経路で確認しています。3画面は配置計算のみ検証しており、実機表示は未検証です。
+
 ## Options
 
 | 項目 | 内容 |
 | --- | --- |
 | Verify Waydroid Startup | Android起動・設定反映・解像度・表示の継続を確認します。OFFでは必須設定の反映後、表示確認と安定待機を省略します。 |
 | Auto Launch Mirishita | 準備確認後にミリシタを自動起動します。Verify OFFではグレーアウトし、手動起動になります。 |
+| F12 Screenshot | ゲーム窓にフォーカスがあるとき、F12でOSの画像フォルダ内MWMへPNGだけを保存します。 |
 | Mouse as Touch | マウス操作をAndroidのタッチ入力として扱います。 |
 | RTScale Zoom Fix | RTScale使用時の過度な拡大や、光の合成などに生じる描画ずれを補正します。通常はONで使用してください。 |
 
