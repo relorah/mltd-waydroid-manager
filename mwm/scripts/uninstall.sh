@@ -42,6 +42,9 @@ PY
 mkdir -p "$CFG_HOME"
 exec 7>"$CFG_HOME/mwm-config.lock"
 flock -n 7 || { echo 'Wait for the MWM save or update operation to finish.' >&2; exit 75; }
+[[ ! -f "${XDG_STATE_HOME:-$HOME/.local/state}/mwm-lite/restore.json" ]] || {
+  echo 'Run mwm-lite --recover before uninstalling.' >&2; exit 78;
+}
 sudo -v
 [[ -x "$HELPER" ]] || { echo 'Update the root helper and try again.' >&2; exit 1; }
 backup_rc=0
@@ -122,6 +125,9 @@ def remove(p):
  if p.is_symlink() or p.is_file():p.unlink()
  elif p.is_dir():shutil.rmtree(p)
 for p in (launcher,desktop):remove(p)
+for name in ('mwm-lite', 'mwm-lite-settings'):
+ remove(launcher.with_name(name))
+ remove(desktop.with_name(name+'.desktop'))
 if app.is_dir():
  for child in app.iterdir():
   remove(child)

@@ -61,6 +61,7 @@ mkdir -p "$STATE"
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}"
 exec 7>"${XDG_CONFIG_HOME:-$HOME/.config}/mwm-config.lock"
 flock -n 7 || die "MWMの設定反映・保存中です。完了してから更新してください。"
+[[ ! -f "${XDG_STATE_HOME:-$HOME/.local/state}/mwm-lite/restore.json" ]] || die "Run mwm-lite --recover before updating MWM."
 "$BOOTSTRAP_PYTHON" - "$APP_HOME" <<'PY'
 import os, sys
 from pathlib import Path
@@ -299,7 +300,7 @@ reset_mwm_state() {
 
 install_mwm_launcher() {
   say "Installing MWM desktop application"
-  local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/mwm" migrated_scale
+  local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/mwm" migrated_scale lite_entry lite_arg
   if [[ -f "$cfg/kwin-rtscale" ]] && [[ "$(tr -d '[:space:]' < "$cfg/kwin-rtscale")" =~ ^(9|10)$ ]]; then
     migrated_scale="$(mktemp "$cfg/.kwin-rtscale.XXXXXX")"
     printf '8\n' > "$migrated_scale"
@@ -347,6 +348,37 @@ Terminal=false
 Categories=Game;
 StartupNotify=false
 StartupWMClass=gamescope
+EOF2
+
+  for lite_entry in mwm-lite mwm-lite-settings; do
+    lite_arg=""
+    [[ "$lite_entry" != mwm-lite-settings ]] || lite_arg="--settings"
+    cat > "$LOCAL_BIN/$lite_entry" <<EOF2
+#!/usr/bin/env bash
+export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PATH"
+exec python "$APP_HOME/lite.py" $lite_arg "\$@"
+EOF2
+    chmod +x "$LOCAL_BIN/$lite_entry"
+  done
+  cat > "$DESKTOP_DIR/mwm-lite.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=Mirishita (MWM Lite)
+Name[ja]=ミリシタ（MWM Lite）
+Exec=$LOCAL_BIN/mwm-lite
+Icon=applications-games
+Terminal=false
+Categories=Game;
+StartupWMClass=Waydroid
+EOF2
+  cat > "$DESKTOP_DIR/mwm-lite-settings.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=MWM Lite Settings
+Exec=$LOCAL_BIN/mwm-lite-settings
+Icon=preferences-system
+Terminal=false
+Categories=Game;Settings;
 EOF2
 
   cat > "$DESKTOP_DIR/mwm.desktop" <<EOF2

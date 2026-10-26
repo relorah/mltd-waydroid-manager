@@ -147,6 +147,39 @@ printf "MWM_RUNTIME_OK\n"'
     [[ $# -eq 1 ]] || { echo "usage: sf-latency <layer>" >&2; exit 2; }
     exec waydroid shell -- dumpsys SurfaceFlinger --latency "$1"
     ;;
+  lite-rtscale-save)
+    [[ $# -eq 1 ]] || exit 2
+    wd sh -c '
+      set -e
+      d=/data/local/tmp/mwm-lite-rtscale-backup
+      umask 077
+      mkdir "$d"
+      if [ -e /data/local/tmp/gles_rtscale.conf ]; then
+        cp -p /data/local/tmp/gles_rtscale.conf "$d/config"
+      fi
+      touch "$d/ready"
+    '
+    ;;
+  lite-rtscale-restore)
+    [[ $# -eq 1 ]] || exit 2
+    wd sh -c '
+      set -e
+      d=/data/local/tmp/mwm-lite-rtscale-backup
+      [ -e "$d" ] || exit 0
+      [ ! -L "$d" ]
+      [ "$(stat -c %u:%a "$d")" = 0:700 ]
+      [ -f "$d/ready" ] && [ ! -L "$d/ready" ]
+      [ ! -L "$d/config" ]
+      if [ -f "$d/config" ]; then
+        cp -p "$d/config" "$d/restore"
+        mv -f "$d/restore" /data/local/tmp/gles_rtscale.conf
+        restorecon /data/local/tmp/gles_rtscale.conf
+      else
+        rm -f /data/local/tmp/gles_rtscale.conf
+      fi
+      rm -rf "$d"
+    '
+    ;;
   rtscale-state)
     wd sh -c 'if [ -e /data/local/tmp/gles_rtscale.conf ]; then echo present; else echo absent; fi'
     ;;
