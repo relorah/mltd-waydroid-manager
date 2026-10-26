@@ -4,10 +4,12 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch, Mock
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT/'mwm'))
 spec = importlib.util.spec_from_file_location('lite', ROOT/'mwm/lite.py')
 lite = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lite)
@@ -62,7 +64,7 @@ class LiteTests(unittest.TestCase):
             process = Mock()
             process.poll.return_value = None
             process.wait.return_value = 0
-            with patch.object(lite, 'STATE', state), patch.object(lite, 'load_settings', return_value=dict(scale=3,fps=False,boost=False)), patch.object(lite, 'screen_size', return_value=(1920,1080)), patch.object(lite, 'boost_available', return_value=False), patch.object(lite, 'call', return_value='STOPPED'), patch.object(lite, 'boot'), patch.object(lite, 'stop_helpers'), patch.object(lite, 'prop', side_effect=prop), patch.object(lite, 'helper', side_effect=helper), patch.object(lite.subprocess, 'Popen', return_value=process), patch.dict(os.environ, WAYLAND_DISPLAY='wayland-test', XDG_CURRENT_DESKTOP='test'), patch.object(lite.time, 'monotonic', side_effect=[0, 99]):
+            with patch.object(lite, 'STATE', state), patch.object(lite, 'load_settings', return_value=dict(scale=3,fps=False,boost=False)), patch.object(lite, 'screen_size', return_value=(1920,1080)), patch.object(lite, 'boost_available', return_value=False), patch.object(lite, 'call', return_value='STOPPED'), patch.object(lite, 'boot'), patch.object(lite, 'stop_helpers'), patch.object(lite, 'check_fullscreen',return_value='other'), patch.object(lite, 'prop', side_effect=prop), patch.object(lite, 'helper', side_effect=helper), patch.object(lite.subprocess, 'Popen', return_value=process), patch.dict(os.environ, WAYLAND_DISPLAY='wayland-test', XDG_CURRENT_DESKTOP='test'), patch.object(lite.time, 'monotonic', side_effect=[0, 99]):
                 with self.assertRaises((RuntimeError, KeyboardInterrupt)):
                     lite.run_locked()
             self.assertIn(('lite-rtscale-restore',), calls)
@@ -90,6 +92,13 @@ class LiteTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     lite.restore(journal)
             self.assertTrue(journal.exists())
+
+    def test_no_display_does_not_touch_waydroid(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(lite,'STATE',Path(d)),patch.object(lite,'screen_size',return_value=(0,0)),patch.object(lite,'load_settings',return_value=dict(scale=3,fps=False,boost=False)),patch.object(lite,'helper') as root:
+            with self.assertRaisesRegex(RuntimeError,'No active display'):
+                lite.run_locked()
+            root.assert_not_called()
+            self.assertFalse((Path(d)/'restore.json').exists())
 
     def test_desktop_profile_is_not_written(self):
         source = (ROOT/'mwm/lite.py').read_text()

@@ -27,6 +27,7 @@ GRAPHICS_ARCHIVES=(
 RTS_CONF="$PAYLOAD/config/gles_rtscale.conf"
 NO_GUI=0
 UPDATE_APP=0
+LITE_ONLY=0
 
 say(){ printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok(){ printf '\033[1;32m[OK]\033[0m %s\n' "$*"; }
@@ -36,8 +37,9 @@ die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 while (($#)); do
   case "$1" in
     --update-app) UPDATE_APP=1; shift ;;
+    --lite-only) LITE_ONLY=1; shift ;;
     --no-gui) NO_GUI=1; shift ;;
-    -h|--help) echo "Usage: ./install.sh [--no-gui] [--update-app]"; exit 0 ;;
+    -h|--help) echo "Usage: ./install.sh [--no-gui] [--update-app] [--lite-only]"; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
@@ -110,6 +112,8 @@ install_packages() {
   say "Installing MWM host dependencies"
   if [[ "$HOST_FAMILY" == ubuntu ]]; then
     install_ubuntu_packages
+  elif (( LITE_ONLY )); then
+    sudo pacman -S --needed python pyside6 polkit zstd rsync desktop-file-utils
   else
     sudo pacman -S --needed \
       python pyside6 gtk3 gtk-layer-shell python-gobject python-cairo polkit \
@@ -322,6 +326,7 @@ install_mwm_launcher() {
     chmod +x "$APP_HOME/scripts/mangoapp-native/mangoapp"
   fi
 
+  if (( ! ${LITE_ONLY:-0} )); then
   cat > "$LOCAL_BIN/mwm" <<EOF2
 #!/usr/bin/env bash
 export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PATH"
@@ -350,13 +355,16 @@ StartupNotify=false
 StartupWMClass=gamescope
 EOF2
 
-  for lite_entry in mwm-lite mwm-lite-settings; do
+  fi
+  for lite_entry in mwm-lite mwm-lite-settings mwm-lite-steam-setup; do
     lite_arg=""
     [[ "$lite_entry" != mwm-lite-settings ]] || lite_arg="--settings"
+    local lite_program=lite.py
+    [[ "$lite_entry" != mwm-lite-steam-setup ]] || lite_program=steam_setup.py
     cat > "$LOCAL_BIN/$lite_entry" <<EOF2
 #!/usr/bin/env bash
 export PATH="$APP_HOME/.runtime/venv/bin:$APP_HOME/.runtime/bin:/usr/games:\$PATH"
-exec python "$APP_HOME/lite.py" $lite_arg "\$@"
+exec python "$APP_HOME/$lite_program" $lite_arg "\$@"
 EOF2
     chmod +x "$LOCAL_BIN/$lite_entry"
   done
@@ -381,6 +389,16 @@ Terminal=false
 Categories=Game;Settings;
 EOF2
 
+  cat > "$DESKTOP_DIR/mwm-lite-steam-setup.desktop" <<EOF2
+[Desktop Entry]
+Type=Application
+Name=MWM Lite Steam Setup
+Exec=$LOCAL_BIN/mwm-lite-steam-setup
+Icon=applications-games
+Terminal=false
+Categories=Game;Settings;
+EOF2
+  if (( ! ${LITE_ONLY:-0} )); then
   cat > "$DESKTOP_DIR/mwm.desktop" <<EOF2
 [Desktop Entry]
 Type=Application
@@ -394,6 +412,7 @@ Categories=Game;Utility;
 StartupNotify=true
 EOF2
   chmod 0644 "$DESKTOP_DIR/mwm.desktop"
+  fi
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
   ok "MWM installed: KDE app menu + $LOCAL_BIN/mwm"
 }
@@ -436,7 +455,11 @@ launch_gui() {
   exec 7>&-
   if (( ! NO_GUI )); then
     say "Launching MWM v$APP_VERSION"
-    "$LOCAL_BIN/mwm" 7>&-
+    if (( LITE_ONLY )); then
+      "$LOCAL_BIN/mwm-lite-steam-setup" 7>&-
+    else
+      "$LOCAL_BIN/mwm" 7>&-
+    fi
   fi
 }
 
@@ -444,10 +467,12 @@ if (( UPDATE_APP )); then
   [[ -x /usr/local/libexec/mwm-root-helper ]] || die "MWM is not installed; run install.sh without --update-app first."
   if [[ "$HOST_FAMILY" == ubuntu ]]; then
     install_packages
-    install_ubuntu_mangoapp
+    if (( ! LITE_ONLY )); then install_ubuntu_mangoapp; fi
+  elif (( LITE_ONLY )); then
+    install_packages
   fi
   command -v rsync >/dev/null || die "rsync is required"
-  if [[ "$HOST_FAMILY" == arch ]] && ! command -v qdbus6 >/dev/null 2>&1; then
+  if (( ! LITE_ONLY )) && [[ "$HOST_FAMILY" == arch ]] && ! command -v qdbus6 >/dev/null 2>&1; then
     sudo pacman -S --needed qt6-tools
   fi
   backup_waydroid
@@ -460,19 +485,29 @@ fi
 
 verify_payload
 install_packages
-if [[ "$HOST_FAMILY" == ubuntu ]]; then install_ubuntu_mangoapp; fi
-if [[ "$HOST_FAMILY" == arch ]] && ! command -v mangoapp >/dev/null 2>&1; then
+if (( ! LITE_ONLY )) && [[ "$HOST_FAMILY" == ubuntu ]]; then install_ubuntu_mangoapp; fi
+if (( ! LITE_ONLY )) && [[ "$HOST_FAMILY" == arch ]] && ! command -v mangoapp >/dev/null 2>&1; then
   sudo pacman -S --needed --noconfirm mangohud || warn "MangoApp installation failed; MWM HUD fallback remains available"
 fi
 check_existing_environment
 backup_waydroid
 apply_graphics_stack
 install_root_helper
-if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/mwm" ]]; then
+if (( LITE_ONLY )); then
+  ok "Lite profile selected; Desktop settings preserved"
+elif [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/mwm" ]]; then
   ok "Existing MWM settings preserved"
 else
   reset_mwm_state
 fi
 install_mwm_launcher
-final_verify
+if (( LITE_ONLY )); then
+  # check_existing_environment already verified Android and the game. Keep
+  # Desktop runtime configuration untouched; Lite applies a temporary profile.
+  waydroid session stop
+  sudo systemctl stop waydroid-container.service
+  ok "MWM Lite ready; open MWM Lite Steam Setup to register both entries"
+else
+  final_verify
+fi
 launch_gui

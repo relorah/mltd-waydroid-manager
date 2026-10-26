@@ -1,0 +1,8 @@
+{
+  "uuid": "mwm-lite-fullscreen@relorah.github.io",
+  "name": "MWM Lite Fullscreen",
+  "description": "Keeps only an active MWM Lite session fullscreen on the primary monitor.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "version": 1,
+  "url": "https://github.com/relorah/mltd-waydroid-manager"
+}

@@ -8,11 +8,13 @@ import json
 import os
 from pathlib import Path
 import signal
-import shutil
 import stat
 import subprocess
 import sys
 import time
+import tempfile
+
+from lite_host import check_fullscreen
 
 ROOT = Path(__file__).resolve().parent
 APP = 'com.bandainamcoent.imas_millionlive_theaterdays'
@@ -63,12 +65,20 @@ def load_settings():
 
 def save_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    with temporary.open('w') as out:
-        json.dump(data, out)
-        out.flush()
-        os.fsync(out.fileno())
-    temporary.replace(path)
+    fd, temporary = tempfile.mkstemp(prefix='.'+path.name+'-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as out:
+            json.dump(data, out)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def dimensions(width, height):
@@ -151,6 +161,7 @@ def stop_helpers():
 
 def restore(journal):
     stop_helpers()
+    (STATE/'display.json').unlink(missing_ok=True)
     data = json.loads(journal.read_text())
     boost_error = None
     if data.get('boost_requested'):
@@ -204,14 +215,15 @@ def run_locked(recover=False):
             return
         settings = load_settings()
         width, height = screen_size()
+        if width <= 0 or height <= 0:
+            raise RuntimeError('No active display. Turn on the display before starting MWM Lite.')
         base = dimensions(width, height)
         if 'RUNNING' in call('waydroid', 'status').upper():
             raise RuntimeError('Stop Desktop MWM / Waydroid before launching Lite')
         if not os.environ.get('WAYLAND_DISPLAY'):
             raise RuntimeError('Lite requires Wayland')
         boost_enabled = settings['boost'] and boost_available()
-        if 'KDE' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper() and not shutil.which('kdotool'):
-            raise RuntimeError('Plasma fullscreen requires kdotool')
+        desktop = check_fullscreen()
         children = []
         watched = []
         def interrupted(_signal, _frame):
@@ -242,7 +254,9 @@ def run_locked(recover=False):
             if boost_available():
                 helper('ps5-boost', 'on' if boost_enabled else 'off')
             watched.append(children[-1])
-            if 'KDE' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper():
+            stamp = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+            save_json(STATE/'display.json', {'pid':os.getpid(), 'start':stamp})
+            if desktop == 'plasma':
                 children.append(subprocess.Popen([sys.executable, str(ROOT/'lite_fullscreen.py')]))
                 watched.append(children[-1])
             children.append(subprocess.Popen(['waydroid', 'show-full-ui']))
@@ -265,6 +279,7 @@ def run_locked(recover=False):
                     raise RuntimeError('Lite display or overlay process exited')
                 time.sleep(1)
         finally:
+            (STATE/'display.json').unlink(missing_ok=True)
             for s in previous:
                 signal.signal(s, signal.SIG_IGN)
             try:
@@ -287,12 +302,43 @@ def run_locked(recover=False):
 
 
 def settings_ui():
+    from PySide6.QtCore import QEvent, Qt
     from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QCheckBox, QPushButton, QMessageBox
     app = QApplication.instance() or QApplication(sys.argv)
-    window = QWidget()
+    class SettingsWindow(QWidget):
+        def eventFilter(self, watched, event):
+            if event.type() == QEvent.Type.KeyPress:
+                key = event.key()
+                popup = isinstance(watched, QComboBox) and watched.view().isVisible()
+                if not popup and isinstance(watched, QComboBox) and key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+                    delta = 1 if key == Qt.Key.Key_Right else -1
+                    watched.setCurrentIndex(max(0, min(watched.count()-1, watched.currentIndex()+delta)))
+                    return True
+                if not popup and key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+                    self.focusNextPrevChild(key == Qt.Key.Key_Down)
+                    return True
+                if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    if isinstance(watched, QCheckBox):
+                        watched.toggle()
+                        return True
+                    if isinstance(watched, QPushButton):
+                        watched.click()
+                        return True
+                    if isinstance(watched, QComboBox) and not popup:
+                        watched.showPopup()
+                        return True
+            return super().eventFilter(watched, event)
+
+        def keyPressEvent(self, event):
+            if event.key() == Qt.Key.Key_Escape:
+                self.close()
+            else:
+                super().keyPressEvent(event)
+
+    window = SettingsWindow()
     window.setWindowTitle('MWM Lite Settings')
     window.setScreen(app.primaryScreen())
-    window.setStyleSheet('QWidget { font-size: 26px; } QPushButton, QComboBox { padding: 14px; } QCheckBox::indicator { width: 28px; height: 28px; }')
+    window.setStyleSheet('QWidget { font-size: 26px; } QPushButton, QComboBox { padding: 14px; } QCheckBox::indicator { width: 28px; height: 28px; } QComboBox:focus,QCheckBox:focus,QPushButton:focus {border:2px solid #68aaff;}')
     layout = QVBoxLayout(window)
     layout.setContentsMargins(48, 40, 48, 40)
     layout.setSpacing(24)
@@ -311,7 +357,7 @@ def settings_ui():
     boost.setChecked(data['boost'] and boost_available())
     boost.setEnabled(boost_available())
     layout.addWidget(boost)
-    instructions = QLabel('Steam Input: use a mouse / keyboard layout. Exit through the Steam menu. PS5 Boost changes system clocks; fan cooling stays enabled after exit.')
+    instructions = QLabel('Steam Input: use a mouse / keyboard layout. D-pad: move focus. A/Enter: select. B/Escape: cancel. Exit the game through Steam. PS5 Boost changes system clocks; fan cooling stays enabled after exit.')
     instructions.setWordWrap(True)
     layout.addWidget(instructions)
     save = QPushButton('Save && Close')
@@ -323,6 +369,9 @@ def settings_ui():
             QMessageBox.critical(window, 'MWM Lite', str(error))
     save.clicked.connect(commit)
     layout.addWidget(save)
+    for control in (scale, fps, boost, save):
+        control.installEventFilter(window)
+    scale.setFocus()
     window.showFullScreen()
     return app.exec()
 
@@ -340,7 +389,8 @@ def run_supervised():
                '--property=StandardOutput=append:'+str(STATE/'session.log'),
                '--property=StandardError=append:'+str(STATE/'session.log')]
     for key in ('WAYLAND_DISPLAY', 'DISPLAY', 'XAUTHORITY', 'XDG_CURRENT_DESKTOP',
-                'XDG_SESSION_TYPE', 'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'XDG_DATA_HOME',
+                'XDG_SESSION_TYPE', 'XDG_SESSION_DESKTOP', 'GAMESCOPE_WAYLAND_DISPLAY',
+                'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'XDG_DATA_HOME',
                 'SteamAppId', 'SteamGameId', 'SteamOverlayGameId'):
         if key in os.environ:
             command.append('--setenv='+key+'='+os.environ[key])
