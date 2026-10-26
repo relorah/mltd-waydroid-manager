@@ -305,7 +305,7 @@ reset_mwm_state() {
 install_mwm_launcher() {
   say "Installing MWM desktop application"
   local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/mwm" migrated_scale lite_entry lite_arg
-  if [[ -f "$cfg/kwin-rtscale" ]] && [[ "$(tr -d '[:space:]' < "$cfg/kwin-rtscale")" =~ ^(9|10)$ ]]; then
+  if (( ! ${LITE_ONLY:-0} )) && [[ -f "$cfg/kwin-rtscale" ]] && [[ "$(tr -d '[:space:]' < "$cfg/kwin-rtscale")" =~ ^(9|10)$ ]]; then
     migrated_scale="$(mktemp "$cfg/.kwin-rtscale.XXXXXX")"
     printf '8\n' > "$migrated_scale"
     mv -f -- "$migrated_scale" "$cfg/kwin-rtscale"

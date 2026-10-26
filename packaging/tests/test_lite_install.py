@@ -40,7 +40,7 @@ class LiteInstallTests(unittest.TestCase):
         function='install_mwm_launcher() {'+source.split('install_mwm_launcher() {',1)[1].split('\nfinal_verify()',1)[0]
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);app=root/'app';app.mkdir();cfg=root/'config/mwm';cfg.mkdir(parents=True)
-            (cfg/'kwin-rtscale').write_text('6\n')
+            (cfg/'kwin-rtscale').write_text('10\n')
             bindir=root/'bin';bindir.mkdir();(bindir/'mwm').write_text('existing Desktop launcher')
             desktop=root/'applications';desktop.mkdir();(desktop/'mwm.desktop').write_text('existing Desktop entry')
             env=dict(os.environ,HOME=d,XDG_CONFIG_HOME=str(root/'config'),APP_HOME=str(app),SCRIPT_DIR=str(ROOT),LOCAL_BIN=str(bindir),DESKTOP_DIR=str(desktop),LITE_ONLY='1')
@@ -48,7 +48,7 @@ class LiteInstallTests(unittest.TestCase):
             subprocess.run(['bash','-c',script],env=env,check=True,capture_output=True,text=True)
             self.assertEqual((bindir/'mwm').read_text(),'existing Desktop launcher')
             self.assertEqual((desktop/'mwm.desktop').read_text(),'existing Desktop entry')
-            self.assertEqual((cfg/'kwin-rtscale').read_text(),'6\n')
+            self.assertEqual((cfg/'kwin-rtscale').read_text(),'10\n')
             for name in ('mwm-lite','mwm-lite-settings','mwm-lite-steam-setup'):
                 self.assertTrue(os.access(bindir/name,os.X_OK))
                 self.assertTrue((desktop/(name+'.desktop')).exists())
