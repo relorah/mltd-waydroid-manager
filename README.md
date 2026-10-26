@@ -52,8 +52,6 @@ Gamescopeで撮影した実機MVです。以下は縮小プレビューです。
 
 </details>
 
-[原寸PNG・比較画像一式（ZIP）](https://github.com/relorah/mltd-waydroid-manager/releases/download/v0.91/MWM_README_Comparisons_20261017.zip)
-
 画像内のゲーム・キャラクター等の権利は各権利者に帰属します。
 
 ## 主な機能
