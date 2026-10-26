@@ -18,7 +18,12 @@ install_ubuntu_packages() {
     libegl1 libgl1 libopengl0 libdbus-1-3 libxcb-icccm4 libxcb-image0
     libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1
     pulseaudio-utils desktop-file-utils curl ca-certificates)
-  if ! command -v gamescope >/dev/null; then
+  if (( ${LITE_ONLY:-0} )); then
+    packages=(python3 python-is-python3 python3-venv python3-pip polkitd pkexec zstd rsync
+      libxcb-cursor0 libxkbcommon-x11-0 libegl1 libgl1 libopengl0 libdbus-1-3
+      libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1
+      desktop-file-utils ca-certificates)
+  elif ! command -v gamescope >/dev/null; then
     ubuntu_candidate gamescope || die 'GamescopeのAPT候補がありません。Ubuntu 26.04 LTSを使用するか、互換性のあるGamescope 3.16系を先に導入してください。別Ubuntu版のパッケージは混在させないでください。'
     packages+=(gamescope)
   fi
@@ -28,11 +33,13 @@ install_ubuntu_packages() {
     if ubuntu_candidate kdotool; then packages+=(kdotool); fi
   fi
   mwm_ubuntu_safe_install "$PACKAGING" "${packages[@]}"
+  if (( ! ${LITE_ONLY:-0} )); then
   local help
   help="$(gamescope --help 2>&1)" || true
   for flag in --backend --expose-wayland --keep-alive --force-windows-fullscreen; do
     grep -q -- "$flag" <<<"$help" || die "Gamescope lacks $flag; install a compatible Gamescope 3.16 build."
   done
+  fi
   # Ubuntu LTS releases do not all package a suitable PySide6. Never pip into
   # externally managed system Python; GI/Cairo come from system packages.
   "$BOOTSTRAP_PYTHON" -m venv --system-site-packages "$APP_HOME/.runtime/venv"

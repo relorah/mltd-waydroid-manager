@@ -72,6 +72,80 @@ RTScale ONではWaydroid表示を高さ1080相当とし、RTScaleの基準寸法
 
 Super（Windows）＋Fで全画面とウィンドウを切り替えます。Single Displayでは、Waydroid起動時にカーソルがある画面へ表示されます。使用したい画面へカーソルを移してStart／Restartを押し、表示されるまでその画面に置いてください。
 
+## MWM Lite / Steam Big Picture
+
+MWM Lite は単一画面・常時全画面・Steam Input前提の独立プロファイルです。Ubuntu 24.04以降とCachyOS / Archで共通の実装を使います。Waydroid・ミリシタ・Houdini / test_libnbの初期導入は [MWI](https://github.com/relorah/mltd-waydroid-installer) で行い、ゲームが正常に起動するAndroid 11 / x86_64環境から使用します。
+
+### Liteの導入
+
+```bash
+bash install.sh --lite-only
+```
+
+既存MWMのアプリ更新は次です。保存済みのDesktop設定とグラフィックスpayloadを保持します。
+
+```bash
+bash install.sh --lite-only --update-app
+```
+
+Lite専用導入ではGamescope / MangoAppの導入・ビルドを要求しません。通常のMWM Desktopインストール経路は従来のままです。Ubuntuは構成済みのAPT配布元だけを使用し、ホストのカーネル・Mesa・firmware変更を含む依存解決は停止します。
+
+### Steam登録
+
+導入後の `MWM Lite Steam Setup` でアカウントを選択し、Steamを完全終了してから `Register both entries` を実行します。Steamは事前に一度起動・ログインしておく必要があります。
+
+- `Mirishita (MWM Lite)`：ゲーム起動（`~/.local/bin/mwm-lite`）
+- `MWM Lite Settings`：全画面の設定画面（`~/.local/bin/mwm-lite-settings`）
+
+登録はネイティブ版Steam用です。Ubuntuの `.steam/debian-installation` とCachyOSの標準保存先を検出します。Flatpak版Steamのサンドボックス設定は対象外です。既存ショートカット・AppID・カスタム引数を保持し、変更前の `shortcuts.vdf` は `~/.local/state/mwm-lite/steam-backups/` に退避します。再実行しても同じ2項目を重複追加しません。Steamが起動中の場合、変更が必要な登録は停止します。
+
+端末からの操作も可能です。
+
+```bash
+mwm-lite-steam-setup --list
+mwm-lite-steam-setup --register
+# 複数アカウントがある場合
+mwm-lite-steam-setup --register --user-id ACCOUNT_ID --steam-root /path/to/Steam
+```
+
+### デスクトップと全画面
+
+動作するsystemdユーザーセッションとWaylandが必要です。
+
+- Plasma Wayland：`kdotool` でプライマリ画面への全画面配置とFPS位置を維持します。
+- Ubuntu / GNOME 46–50：Steam Setupの `Enable GNOME fullscreen support` でユーザー用拡張を導入します。初回はログアウト・再ログイン後、同じボタンで有効化します。拡張は生存確認できるLiteセッション中のWaydroid / FPSウィンドウだけを対象にします。GNOME実機動作は未確認です。
+- Steam専用ゲームセッション：セッション側compositorに表示を任せます。MWM専用Gamescopeは起動しません。専用ゲームセッションと実コントローラーでの動作は未確認です。
+
+GNOME拡張の端末操作は `mwm-lite-steam-setup --enable-gnome` です。有効化を確認できないGNOME環境では、Waydroid設定を変更する前に案内して停止します。
+
+起動時のプライマリ画面の論理サイズ・比率を使い、FSRは使用しません。起動中の画面比変更や複数画面への展開は対象外です。ディスプレイを有効にしてから起動してください。
+
+### 設定と入力
+
+`MWM Lite Settings` の保存内容は次回のゲーム起動時に適用します。
+
+- `RTScale`：標準x3、選択x6、復旧用x1。x3がすべての機器や場面で最適という意味ではありません。
+- `FPS Counter`：初期OFF。SurfaceFlingerから取得するゲームのFPSだけを表示します。
+- `PS5 Boost Mode`：初期OFF。`/dev/icc` と `/dev/mp1` が文字デバイスの場合だけ選択できます。非対応PCでは保存済みONも無効です。デバイスの存在はioctl対応を保証しません。ファン制御を有効にしてシステム全体のBoostを変更し、ONで起動した場合は終了時にOFFを要求します。ファン制御は終了後も有効です。状態取得APIがないため起動前のBoost状態は復元できません。
+
+Steamのコントローラーレイアウトは利用する実機に合わせて選択してください。自動で既存レイアウトを書き換えません。ゲーム用は右スティック／パッド→マウス、トリガー等→左クリックを基本に、Waydroidのタッチ偽装へ渡します。Settings用は上下→上下キー、左右→左右キー、A→Enter、B→Escapeとします。
+
+Settingsでは上下で項目移動、左右でRTScale変更、Enterで選択／切替／保存、Escapeで保存せず終了します。コントローラーから生成されたキーの経路は実機未確認ですが、同じキーイベントによる画面操作はテストしています。
+
+### 終了・分離・復旧
+
+Desktop MWM / Waydroidを停止してからLiteを起動します。Desktopと操作・設定ロックを共有し、同時使用を防ぎます。Liteの設定は `~/.config/mwm-lite/settings.json` に分離し、Desktop設定ファイルには書き込みません。共有Waydroidプロパティと元のAndroid RTScaleファイルは退避して終了時に復元します。Lite設定はDesktopの設定バックアップ対象外です。
+
+終了はSteamライブラリのゲーム詳細の `Exit game` を使用します。CachyOS / Plasmaでは両エントリ起動、ゲームタイトル、マウスのタッチ偽装、FPS表示、実際のExit gameからの復元を確認しています。PlasmaでのShift+Tabによるゲーム内Steam overlayは表示を確認できていません。Guideボタン、Steam Input実コントローラー操作、PS5実機、GNOME全画面は別途検証が必要です。
+
+ゲームと復元処理は `mwm-lite-session` ユーザーサービスが担当します。Steamが追跡するランチャーを強制終了しても、サービスが存続していれば終了を検出して復元します。復元後はWaydroidが停止します。サービス本体のSIGKILL・電源断で復旧情報が残る場合は次を実行します。
+
+```bash
+mwm-lite --recover
+```
+
+`~/.local/state/mwm-lite/restore.json` は手で削除しないでください。復旧待ちの間はDesktop起動操作・更新・アンインストールを停止します。起動エラーは同じ保存先の `errors.log`、セッション出力は `session.log` に記録します。XDGの指定がある場合はそれに従います。
+
 ## デュアルモニター表示
 
 Homeの Display Mode → Dual Display で、ゲームを2台のモニターにまたがって表示します。起動時から枠なしウィンドウが2画面へ広がるため、手動のウィンドウ切り替えは不要です。調整項目は Span Display にあります。

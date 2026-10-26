@@ -42,10 +42,13 @@ PY
 mkdir -p "$CFG_HOME"
 exec 7>"$CFG_HOME/mwm-config.lock"
 flock -n 7 || { echo 'Wait for the MWM save or update operation to finish.' >&2; exit 75; }
+[[ ! -f "${XDG_STATE_HOME:-$HOME/.local/state}/mwm-lite/restore.json" ]] || {
+  echo 'Run mwm-lite --recover before uninstalling.' >&2; exit 78;
+}
 sudo -v
 [[ -x "$HELPER" ]] || { echo 'Update the root helper and try again.' >&2; exit 1; }
 backup_rc=0
-backup="$(sudo -n "$HELPER" backup-status)" || backup_rc=$?
+sudo -n "$HELPER" backup-status >/dev/null || backup_rc=$?
 if (( backup_rc == 3 )); then
   if (( ! APP_ONLY )); then
     printf 'No backup was found. Remove MWM only? [yes/No] '
@@ -110,6 +113,9 @@ if (( ! APP_ONLY )); then
   sudo -n "$HELPER" backup-restore || { echo 'Restoration failed. MWM will be retained.' >&2; exit 1; }
 fi
 sudo -n "$HELPER" backup-cleanup-setup "${XDG_STATE_HOME:-$HOME/.local/state}/mwm-setup"
+if [[ -f "$APP_HOME/steam_setup.py" ]]; then
+  python "$APP_HOME/steam_setup.py" --remove-gnome
+fi
 # Remove only this user's rule. Other MWM users can retain the shared helper.
 sudo rm -f -- "/etc/sudoers.d/mwm-$(id -un)"
 remaining="$(sudo find /etc/sudoers.d -maxdepth 1 -type f -name 'mwm-*' -print)"
@@ -122,6 +128,9 @@ def remove(p):
  if p.is_symlink() or p.is_file():p.unlink()
  elif p.is_dir():shutil.rmtree(p)
 for p in (launcher,desktop):remove(p)
+for name in ('mwm-lite', 'mwm-lite-settings', 'mwm-lite-steam-setup'):
+ remove(launcher.with_name(name))
+ remove(desktop.with_name(name+'.desktop'))
 if app.is_dir():
  for child in app.iterdir():
   remove(child)

@@ -560,6 +560,10 @@ case "$ACTION" in
     flock -n 7 || { echo "Settings are being saved or updated. Try again when complete." >&2; exit 75; }
     [[ ! -d "${XDG_CONFIG_HOME:-$HOME/.config}/mwm-config.previous" ]] || { echo "A previous settings save was interrupted. Settings recovery is required." >&2; exit 78; }
     flock -n 8 || { echo "Waydroid operation already in progress" >&2; exit 75; }
+    if [[ -f "${XDG_STATE_HOME:-$HOME/.local/state}/mwm-lite/restore.json" ]]; then
+      echo "MWM Lite recovery is pending. Run mwm-lite --recover before Desktop operations." >&2
+      exit 78
+    fi
     ;;
 esac
 case "$ACTION" in
