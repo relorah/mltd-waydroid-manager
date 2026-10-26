@@ -62,7 +62,7 @@ class LiteTests(unittest.TestCase):
             process = Mock()
             process.poll.return_value = None
             process.wait.return_value = 0
-            with patch.object(lite, 'STATE', state), patch.object(lite, 'load_settings', return_value=dict(scale=3,fps=False,boost=False)), patch.object(lite, 'screen_size', return_value=(1920,1080)), patch.object(lite, 'boost_available', return_value=False), patch.object(lite, 'call', return_value='STOPPED'), patch.object(lite, 'boot'), patch.object(lite, 'prop', side_effect=prop), patch.object(lite, 'helper', side_effect=helper), patch.object(lite.subprocess, 'Popen', return_value=process), patch.dict(os.environ, WAYLAND_DISPLAY='wayland-test', XDG_CURRENT_DESKTOP='test'), patch.object(lite.time, 'monotonic', side_effect=[0, 99]):
+            with patch.object(lite, 'STATE', state), patch.object(lite, 'load_settings', return_value=dict(scale=3,fps=False,boost=False)), patch.object(lite, 'screen_size', return_value=(1920,1080)), patch.object(lite, 'boost_available', return_value=False), patch.object(lite, 'call', return_value='STOPPED'), patch.object(lite, 'boot'), patch.object(lite, 'stop_helpers'), patch.object(lite, 'prop', side_effect=prop), patch.object(lite, 'helper', side_effect=helper), patch.object(lite.subprocess, 'Popen', return_value=process), patch.dict(os.environ, WAYLAND_DISPLAY='wayland-test', XDG_CURRENT_DESKTOP='test'), patch.object(lite.time, 'monotonic', side_effect=[0, 99]):
                 with self.assertRaises((RuntimeError, KeyboardInterrupt)):
                     lite.run_locked()
             self.assertIn(('lite-rtscale-restore',), calls)
@@ -119,6 +119,42 @@ class LiteBackupTests(unittest.TestCase):
                 self.assertEqual(action('lite-rtscale-restore',directory).returncode,0)
                 self.assertEqual(config.read_bytes() if config.exists() else None, original if existing else None)
                 self.assertEqual(action('lite-rtscale-restore',directory).returncode,0)
+
+
+class LiteSupervisorTests(unittest.TestCase):
+    def test_owner_identity(self):
+        with patch.object(lite, 'OWNER', None):
+            self.assertTrue(lite.owner_alive())
+        stamp = Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()[19]
+        with patch.object(lite, 'OWNER', (os.getpid(),stamp)):
+            self.assertTrue(lite.owner_alive())
+        with patch.object(lite, 'OWNER', (os.getpid(),'wrong')):
+            self.assertFalse(lite.owner_alive())
+        with patch.object(lite, 'OWNER', (999999999,'1')):
+            self.assertFalse(lite.owner_alive())
+
+    def test_service_owns_cleanup_without_steam_preload(self):
+        process=Mock()
+        process.wait.return_value=0
+        process.poll.return_value=0
+        with tempfile.TemporaryDirectory() as directory, patch.object(lite,'STATE',Path(directory)), patch.object(lite.subprocess,'Popen',return_value=process) as start, patch.dict(os.environ,LD_PRELOAD='steam-test-preload',SteamAppId='123'):
+            self.assertEqual(lite.run_supervised(),0)
+        command=start.call_args.args[0]
+        self.assertIn('--property=KillMode=mixed',command)
+        self.assertIn('--property=TimeoutStopSec=180',command)
+        self.assertIn('--setenv=SteamAppId=123',command)
+        self.assertIn('--session-owner',command)
+        self.assertFalse(any('LD_PRELOAD' in arg for arg in command))
+
+    def test_primary_screen_script(self):
+        spec=importlib.util.spec_from_file_location('lite_fullscreen',ROOT/'mwm/lite_fullscreen.py')
+        fullscreen=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fullscreen)
+        script=fullscreen.script_for((-1920,120,1920,1080))
+        self.assertNotIn('TARGET_',script)
+        self.assertIn('x:-1920',script)
+        self.assertIn('w.frameGeometry=target',script)
+        self.assertIn('w.fullScreen=true',script)
 
 
 if __name__ == '__main__':

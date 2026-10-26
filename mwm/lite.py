@@ -19,6 +19,8 @@ APP = 'com.bandainamcoent.imas_millionlive_theaterdays'
 HELPER = '/usr/local/libexec/mwm-root-helper'
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home()/'.config'))) / 'mwm-lite/settings.json'
 STATE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'mwm-lite'
+OWNER = None
+
 PROPS = ('width', 'height', 'multi_windows', 'fake_touch', 'width_padding', 'height_padding', 'uevent')
 
 
@@ -88,9 +90,22 @@ def screen_size():
     return g.width(), g.height()
 
 
-def boot():
+def owner_alive():
+    if OWNER is None:
+        return True
+    pid, stamp = OWNER
+    try:
+        fields = Path('/proc', str(pid), 'stat').read_text().rsplit(')', 1)[1].split()
+        return fields[0] != 'Z' and fields[19] == stamp
+    except (OSError, IndexError):
+        return False
+
+
+def boot(check_owner=True):
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
+        if check_owner and not owner_alive():
+            raise KeyboardInterrupt
         try:
             if helper('boot-completed') == '1':
                 return
@@ -104,7 +119,38 @@ def stop_session():
     call('waydroid', 'session', 'stop')
 
 
+def stop_helpers():
+    # SIGKILL cannot run parent cleanup. Recover only this installation's two
+    # Lite helpers, owned by this user; never match arbitrary Python processes.
+    targets = {os.fsencode(str(ROOT/name)) for name in ('lite_fps.py', 'lite_fullscreen.py')}
+    owned = []
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != os.getuid():
+                continue
+            args = entry.joinpath('cmdline').read_bytes().split(b'\0')
+            if not targets.intersection(args):
+                continue
+            stamp = entry.joinpath('stat').read_text().rsplit(')', 1)[1].split()[19]
+            os.kill(int(entry.name), signal.SIGTERM)
+            owned.append((entry, stamp))
+        except (OSError, IndexError):
+            pass
+    deadline = time.monotonic() + 4
+    while any(entry.exists() for entry, _ in owned) and time.monotonic() < deadline:
+        time.sleep(.1)
+    for entry, stamp in owned:
+        try:
+            if entry.joinpath('stat').read_text().rsplit(')', 1)[1].split()[19] == stamp:
+                os.kill(int(entry.name), signal.SIGKILL)
+        except (OSError, IndexError):
+            pass
+
+
 def restore(journal):
+    stop_helpers()
     data = json.loads(journal.read_text())
     boost_error = None
     if data.get('boost_requested'):
@@ -117,7 +163,7 @@ def restore(journal):
     helper('container-start')
     session = subprocess.Popen(['waydroid', 'session', 'start'])
     try:
-        boot()
+        boot(check_owner=False)
         helper('force-stop-app')
         for key in PROPS:
             prop(key, data['props'][key])
@@ -207,6 +253,8 @@ def run_locked(recover=False):
             started = False
             deadline = time.monotonic() + 40
             while True:
+                if not owner_alive():
+                    raise KeyboardInterrupt
                 running = bool(helper('pidof-mirishita'))
                 started |= running
                 if started and not running:
@@ -243,6 +291,7 @@ def settings_ui():
     app = QApplication.instance() or QApplication(sys.argv)
     window = QWidget()
     window.setWindowTitle('MWM Lite Settings')
+    window.setScreen(app.primaryScreen())
     window.setStyleSheet('QWidget { font-size: 26px; } QPushButton, QComboBox { padding: 14px; } QCheckBox::indicator { width: 28px; height: 28px; }')
     layout = QVBoxLayout(window)
     layout.setContentsMargins(48, 40, 48, 40)
@@ -278,14 +327,57 @@ def settings_ui():
     return app.exec()
 
 
+def run_supervised():
+    # Steam force-kills tracked descendants, including restoration commands.
+    # A user service owns Waydroid and cleanup outside Steam's process tree;
+    # it watches this small tracked launcher to notice even a SIGKILL.
+    STATE.mkdir(parents=True, exist_ok=True)
+    stamp = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+    unit = 'mwm-lite-session'
+    command = ['systemd-run', '--user', '--wait', '--collect', '--quiet',
+               '--unit='+unit, '--property=TimeoutStopSec=180',
+               '--property=KillMode=mixed',
+               '--property=StandardOutput=append:'+str(STATE/'session.log'),
+               '--property=StandardError=append:'+str(STATE/'session.log')]
+    for key in ('WAYLAND_DISPLAY', 'DISPLAY', 'XAUTHORITY', 'XDG_CURRENT_DESKTOP',
+                'XDG_SESSION_TYPE', 'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'XDG_DATA_HOME',
+                'SteamAppId', 'SteamGameId', 'SteamOverlayGameId'):
+        if key in os.environ:
+            command.append('--setenv='+key+'='+os.environ[key])
+    # Use the same known-working interpreter, without Steam's preload / Qt
+    # library environment. The service manager supplies a clean session PATH.
+    command += [sys.executable, str(ROOT/'lite.py'), '--session-owner', str(os.getpid())+':'+stamp]
+    wait = subprocess.Popen(command)
+    def interrupted(_signal, _frame):
+        raise KeyboardInterrupt
+    previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        return wait.wait()
+    finally:
+        if wait.poll() is None:
+            subprocess.run(['systemctl', '--user', 'stop', '--no-block', unit], timeout=5, check=False)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--settings', action='store_true')
     mode.add_argument('--recover', action='store_true')
+    mode.add_argument('--session-owner', help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        return settings_ui() if args.settings else run(args.recover)
+        if args.settings:
+            return settings_ui()
+        if args.session_owner:
+            global OWNER
+            pid, stamp = args.session_owner.split(':', 1)
+            if not pid.isdecimal() or not stamp.isdecimal():
+                raise ValueError('Invalid session owner')
+            OWNER = (int(pid), stamp)
+            return run()
+        return run(True) if args.recover else run_supervised()
     except KeyboardInterrupt:
         return 130
     except Exception as error:
